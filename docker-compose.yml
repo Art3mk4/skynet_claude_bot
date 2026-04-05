@@ -1,0 +1,8 @@
+services:
+  claude_bot:
+    build: .
+    container_name: claude_bot
+    restart: always
+    env_file: .env
+    volumes:
+      - ./conversations:/app/conversations
