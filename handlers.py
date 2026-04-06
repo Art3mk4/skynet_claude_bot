@@ -18,12 +18,13 @@ def is_allowed_user(user_id: int) -> bool:
     return str(user_id) in allowed.split(',')
 
 
-def is_mention(message: Message) -> bool:
+async def is_mention(message: Message) -> bool:
     """Проверяет упоминание бота в сообщении"""
     if not message.text:
         return False
 
-    bot_username = message.bot.username
+    bot_info = await message.bot.me()
+    bot_username = bot_info.username
     text_lower = message.text.lower()
 
     # Проверка @username или просто имени
@@ -41,9 +42,11 @@ async def cmd_start(message: Message):
     await message.answer(
         "Привет! Я SkyNet, AI ассистент на базе Claude от Anthropic.\n\n"
         "Упомяни меня (@username или просто 'skynet') в сообщении, и я отвечу.\n"
+        "Работаю в группах, каналах и комментариях к постам.\n\n"
         "Команды:\n"
         "/start - Начать\n"
         "/clear - Очистить историю диалога\n"
+        "/chats - Список активных чатов\n"
         "/help - Помощь"
     )
 
@@ -68,27 +71,51 @@ async def cmd_help(message: Message):
         "Упомяни меня в сообщении:\n"
         "• @bot_username что такое Python?\n"
         "• skynet, помоги с кодом\n\n"
+        "Работаю в личных чатах, группах, каналах и комментариях.\n"
         "Я запоминаю контекст разговора в рамках чата.\n\n"
         "Команды:\n"
         "/clear - Очистить историю\n"
+        "/chats - Список активных чатов\n"
         "/help - Эта справка"
     )
 
 
-@router.message(F.text)
-async def handle_message(message: Message):
-    logger.info(f"Received message from user {message.from_user.id} in chat {message.chat.id} (type: {message.chat.type}): {message.text[:50]}")
-
+@router.message(Command('chats'))
+async def cmd_chats(message: Message):
     if not is_allowed_user(message.from_user.id):
-        logger.warning(f"User {message.from_user.id} not allowed")
         return
 
-    # В личке отвечаем всегда, в группах только при упоминании
-    is_private = message.chat.type == 'private'
-    logger.info(f"Is private chat: {is_private}")
+    from claude_client import ClaudeClient
+    active_chats = claude.get_active_chats()
 
-    if not is_private and not is_mention(message):
-        logger.info("Not a mention in group chat, ignoring")
+    if not active_chats:
+        await message.answer("Нет активных чатов с историей")
+        return
+
+    response = "📊 Активные чаты:\n\n"
+    for chat_id, msg_count in active_chats.items():
+        chat_type = "Личный чат" if chat_id > 0 else "Группа"
+        response += f"• Chat ID: `{chat_id}` ({chat_type})\n  Сообщений в истории: {msg_count}\n\n"
+
+    await message.answer(response)
+
+
+@router.message(F.text)
+async def handle_message(message: Message):
+    logger.info(f"📩 Message received: user={message.from_user.id}, chat={message.chat.id}, type={message.chat.type}, text='{message.text[:50]}'")
+
+    # В личке проверяем ALLOWED_USERS
+    is_private = message.chat.type == 'private'
+
+    if is_private and not is_allowed_user(message.from_user.id):
+        logger.info(f"⏭️ User {message.from_user.id} not in ALLOWED_USERS, ignoring private chat")
+        return
+
+    logger.info(f"Chat type: {message.chat.type}, is_private: {is_private}")
+
+    # В группах/каналах отвечаем только при упоминании
+    if not is_private and not await is_mention(message):
+        logger.info("Not a mention in group/channel/comments, ignoring")
         return
 
     # Убираем упоминание из текста
@@ -109,14 +136,18 @@ async def handle_message(message: Message):
         user_name = message.from_user.full_name or message.from_user.username or "User"
 
         response = await claude.get_response(chat_id, text, user_name)
+        logger.info(f"✅ Got response from Claude, length: {len(response)}")
 
         # Разбиваем длинные сообщения
         if len(response) > 4096:
+            logger.info(f"Splitting long message into chunks")
             for i in range(0, len(response), 4096):
                 await message.answer(response[i:i+4096])
+                logger.info(f"Sent chunk {i//4096 + 1}")
         else:
             await message.answer(response)
+            logger.info(f"✅ Message sent successfully")
 
     except Exception as e:
-        logger.error(f"Error processing message: {e}")
+        logger.error(f"Error processing message: {e}", exc_info=True)
         await message.answer(f"Произошла ошибка: {str(e)}")

@@ -6,10 +6,29 @@ from aiogram import Bot, Dispatcher
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
 from aiogram.client.session.aiohttp import AiohttpSession
+from aiogram.types import Update
 from handlers import router
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+
+async def log_updates(handler, event: Update, data: dict):
+    """Middleware для логирования всех входящих апдейтов"""
+    try:
+        chat_id = None
+        chat_type = None
+        user_id = None
+        text = None
+        if event.message:
+            chat_id = event.message.chat.id
+            chat_type = event.message.chat.type
+            user_id = event.message.from_user.id if event.message.from_user else None
+            text = event.message.text[:50] if event.message.text else "[no text]"
+        logger.info(f"📨 Update {event.update_id}: type={event.event_type}, chat_id={chat_id}, chat_type={chat_type}, user_id={user_id}, text={text}")
+    except Exception as e:
+        logger.error(f"Error in middleware: {e}")
+    return await handler(event, data)
 
 
 async def main():
@@ -42,6 +61,7 @@ async def main():
         session=session
     )
     dp = Dispatcher()
+    dp.update.middleware(log_updates)
     dp.include_router(router)
 
     logger.info("Claude bot started")

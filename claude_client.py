@@ -60,6 +60,10 @@ class ClaudeClient:
 
         logger.info(f"Cleared conversation for chat {chat_id}")
 
+    def get_active_chats(self) -> Dict[int, int]:
+        """Возвращает словарь активных чатов и количество сообщений в них"""
+        return {chat_id: len(messages) for chat_id, messages in self.conversations.items()}
+
     async def get_response(self, chat_id: int, user_message: str, user_name: str = "User") -> str:
         """Получает ответ от Claude через OmniRoute"""
 
