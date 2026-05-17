@@ -99,7 +99,7 @@ async def cmd_help(message: Message):
     await message.answer(
         "Я SkyNet, AI ассистент на базе Claude.\n\n"
         "Упомяни меня в сообщении:\n"
-        "• @bot_username что такое Python?\n"
+        "• @bot\\_username что такое Python?\n"
         "• skynet, помоги с кодом\n\n"
         "Работаю в личных чатах, группах, каналах и комментариях.\n"
         "Я запоминаю контекст разговора в рамках чата.\n\n"
@@ -108,9 +108,10 @@ async def cmd_help(message: Message):
         "/chats - Список активных чатов\n"
         "/channels - Мониторируемые каналы\n"
         "/users - Список разрешенных пользователей\n"
-        "/user_add <id> - Добавить пользователя\n"
-        "/user_del <id> - Удалить пользователя\n"
-        "/help - Эта справка"
+        "/user\\_add <id> - Добавить пользователя\n"
+        "/user\\_del <id> - Удалить пользователя\n"
+        "/help - Эта справка",
+        parse_mode="MarkdownV2"
     )
 
 
@@ -345,17 +346,23 @@ async def cmd_user_del(message: Message):
     if len(args) < 2:
         await message.answer(
             "Использование: /user_del <user_id>\n\n"
-            "Пример: /user_del 123456789"
+            "Пример: /user_del 123456789",
+            parse_mode=None
         )
         return
 
     try:
         user_id = int(args[1])
-    except ValueError:
-        await message.answer("Ошибка: ID пользователя должен быть числом")
+        logger.info(f"Parsed user_id: {user_id}")
+    except ValueError as e:
+        logger.error(f"Failed to parse user_id from '{args[1]}': {e}")
+        await message.answer("Ошибка: ID пользователя должен быть числом", parse_mode=None)
         return
 
-    if claude.remove_user(user_id):
+    result = claude.remove_user(user_id)
+    logger.info(f"remove_user({user_id}) returned: {result}")
+
+    if result:
         await message.answer(f"[OK] Пользователь {user_id} удален из списка разрешенных!", parse_mode=None)
     else:
         await message.answer(f"[WARN] Пользователь {user_id} не найден в списке разрешенных", parse_mode=None)

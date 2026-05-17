@@ -60,6 +60,9 @@ To use the bot in a channel:
 - `/channels` — List monitored channels (admin status)
 - `/add_channel <id>` — Add a channel to monitored list
 - `/remove_channel <id>` — Remove a channel from monitored list
+- `/user_add <id>` — Add user to allowed list (private chat only)
+- `/user_del <id>` — Remove user from allowed list (private chat only)
+- `/user_list` — List allowed users (private chat only)
 - `/help` — Show help
 
 ## Testing

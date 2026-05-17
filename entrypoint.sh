@@ -2,7 +2,7 @@
 set -e
 
 echo "Running tests..."
-python -m pytest -v --tb=short
+TEST_MODE=1 python -m pytest -v --tb=short
 
 if [ $? -eq 0 ]; then
     echo "✓ All tests passed"

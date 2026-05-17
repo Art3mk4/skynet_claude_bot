@@ -28,6 +28,10 @@ class ClaudeClient:
         self.users_file = self.conversations_dir / "users.json"
         self.conversations_dir.mkdir(exist_ok=True)
 
+        # Clear users.json in test mode (pytest runs)
+        if os.getenv('TEST_MODE') == '1' and self.users_file.exists():
+            self.users_file.unlink()
+
         # Загружаем сохраненные диалоги, каналы и пользователей
         self._load_conversations()
         self._load_monitored_channels()

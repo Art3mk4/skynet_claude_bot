@@ -19,7 +19,8 @@ def claude_client(temp_conversations_dir):
         with patch.dict('os.environ', {
             'OMNIROUTE_API_KEY': 'test_key',
             'OMNIROUTE_BASE_URL': 'http://test.local/v1',
-            'OMNIROUTE_MODEL': 'test-model'
+            'OMNIROUTE_MODEL': 'test-model',
+            'TEST_MODE': '1'
         }):
             client = ClaudeClient()
             client.conversations_dir = temp_conversations_dir
@@ -31,7 +32,8 @@ class TestClaudeClientInit:
         with patch.dict('os.environ', {
             'OMNIROUTE_API_KEY': 'my_key',
             'OMNIROUTE_BASE_URL': 'http://custom.url/v1',
-            'OMNIROUTE_MODEL': 'custom-model'
+            'OMNIROUTE_MODEL': 'custom-model',
+            'TEST_MODE': '1'
         }), patch.object(Path, 'mkdir'), patch('claude_client.ClaudeClient._load_conversations'):
             client = ClaudeClient()
             assert client.model == 'custom-model'
@@ -235,7 +237,8 @@ class TestChannelManagement:
         """Test that monitored channels persist across instances"""
         with patch.dict('os.environ', {
             'OMNIROUTE_API_KEY': 'test_key',
-            'OMNIROUTE_BASE_URL': 'http://test.local/v1'
+            'OMNIROUTE_BASE_URL': 'http://test.local/v1',
+            'TEST_MODE': '1'
         }), patch.object(Path, 'mkdir'):
             # First instance: add a channel
             client1 = ClaudeClient()
@@ -246,7 +249,8 @@ class TestChannelManagement:
         # Second instance: should load the channel
         with patch.dict('os.environ', {
             'OMNIROUTE_API_KEY': 'test_key',
-            'OMNIROUTE_BASE_URL': 'http://test.local/v1'
+            'OMNIROUTE_BASE_URL': 'http://test.local/v1',
+            'TEST_MODE': '1'
         }), patch.object(Path, 'mkdir'), patch.object(ClaudeClient, '_load_conversations'), \
          patch.object(ClaudeClient, '_load_monitored_channels'):
             client2 = ClaudeClient()
@@ -305,7 +309,8 @@ class TestUserManagement:
         """Test that users persist across instances"""
         with patch.dict('os.environ', {
             'OMNIROUTE_API_KEY': 'test_key',
-            'OMNIROUTE_BASE_URL': 'http://test.local/v1'
+            'OMNIROUTE_BASE_URL': 'http://test.local/v1',
+            'TEST_MODE': '1'
         }), patch.object(Path, 'mkdir'), patch.object(ClaudeClient, '_load_conversations'), \
              patch.object(ClaudeClient, '_load_monitored_channels'):
             client1 = ClaudeClient()
@@ -321,7 +326,8 @@ class TestUserManagement:
 
         with patch.dict('os.environ', {
             'OMNIROUTE_API_KEY': 'test_key',
-            'OMNIROUTE_BASE_URL': 'http://test.local/v1'
+            'OMNIROUTE_BASE_URL': 'http://test.local/v1',
+            'TEST_MODE': '1'
         }), patch.object(Path, 'mkdir'), patch.object(ClaudeClient, '_load_conversations'), \
              patch.object(ClaudeClient, '_load_monitored_channels'), patch.object(ClaudeClient, '_load_allowed_users'):
             client2 = ClaudeClient()
