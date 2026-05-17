@@ -1,147 +1,150 @@
 # SkyNet Telegram Bot
 
-AI-powered Telegram bot using Claude via OmniRoute gateway.
+<div align="center">
 
-## Features
+![Python](https://img.shields.io/badge/python-3.10+-blue.svg)
+![License](https://img.shields.io/badge/license-MIT-green.svg)
+![Tests](https://img.shields.io/badge/tests-51-passing-brightgreen.svg)
 
-- 🤖 Powered by Claude Sonnet 4.5 through OmniRoute
-- 💬 Conversation history with context (last 20 messages)
-- 🔒 Private chat support with full responses
-- 👥 Group chat support (responds when mentioned)
-- 📢 Channel comments support (responds when mentioned)
-- 🐳 Docker containerized with automated testing
-- 🔐 Tor/SOCKS5 proxy support for restricted networks
-- 💾 Persistent conversation storage
-- ✅ 31 automated tests run on startup
+AI-powered Telegram bot using Claude Sonnet 4.5 through OmniRoute gateway.
 
-## Prerequisites
+</div>
 
-- Docker
-- Telegram Bot Token (from [@BotFather](https://t.me/BotFather))
+## ✨ Features
+
+- **Claude Sonnet 4.5** via OmniRoute AI gateway
+- **Conversation context** - remembers last 20 messages per chat
+- **Privacy-first** - user whitelist for private chats
+- **Group support** - responds to mentions (no privacy mode needed)
+- **Channel integration** - works through discussion groups
+- **Tor support** - SOCKS5 proxy with automatic fallback
+- **Docker-ready** - containerized deployment
+- **Tested** - 51 automated tests on startup
+
+## 🚀 Quick Start
+
+### Prerequisites
+
+- Docker and Docker Compose
+- Telegram Bot Token ([@BotFather](https://t.me/BotFather))
 - OmniRoute API access
-- (Optional) Tor/SOCKS5 proxy for Telegram API access
+- (Optional) Tor/SOCKS5 proxy for restricted networks
 
-## Quick Start
+### Setup
 
-1. Clone the repository:
-```bash
-git clone <your-repo-url>
-cd claude_bot
-```
+1. **Clone the repository**
+   ```bash
+   git clone <your-repo-url>
+   cd claude_bot
+   ```
 
-2. Create `.env` file:
-```bash
-cp .env.example .env
-```
+2. **Configure environment**
+   ```bash
+   cp .env.example .env
+   # Edit .env with your credentials
+   ```
 
-3. Edit `.env` with your credentials:
-```env
-TG_TOKEN=your_telegram_bot_token
-TG_PROXY=socks5://127.0.0.1:9150  # Optional, for Tor
-OMNIROUTE_BASE_URL=https://your-omniroute-instance/v1
-OMNIROUTE_MODEL=kr/claude-sonnet-4.5
-OMNIROUTE_API_KEY=your_omniroute_api_key
-ALLOWED_USERS=123456789  # Your Telegram user ID for private chats
-```
+3. **Start with Docker Compose (recommended)**
+   ```bash
+   docker compose up -d
+   ```
 
-4. Build and run:
-```bash
-docker build -t skynet_claude_bot .
-docker run -d \
-  --name skynet_claude_bot \
-  --network host \
-  --env-file .env \
-  --restart always \
-  -v $(pwd)/conversations:/app/conversations \
-  skynet_claude_bot
-```
-
-## Bot Configuration
-
-### Privacy Mode
-For the bot to work in groups and channels, you must disable Privacy Mode in @BotFather:
-1. Send `/mybots` to @BotFather
-2. Select your bot
-3. Go to `Bot Settings` → `Group Privacy`
-4. Set to **DISABLED**
-
-### Channel Setup
-
-**Important:** Telegram bots cannot receive messages directly from channels. To make the bot respond in channels, you need to set up a **discussion group**.
-
-1. Create or select a discussion group for your channel
-2. Add the bot as an administrator to the **discussion group**
-3. Add the bot as an administrator to the **channel** (optional, only if you want to use /channels command)
-4. Give the bot permissions to read and send messages in the discussion group
-
-**How it works:**
-- Bot receives messages from the **discussion group**, not the channel itself
-- Users must comment on channel posts and mention `@botname`, `skynet`, or `скайнет`
-- Bot will respond only to mentions in the discussion group comments
-
-## Usage
-
-### Private Chat
-The bot responds only to users listed in `ALLOWED_USERS`. Simply send any message.
-
-### Group Chat
-The bot responds to **anyone** when mentioned (ignores `ALLOWED_USERS` in groups):
-- `@bot_username your question`
-- `skynet, help me with this`
-- `скайнет, что это?`
-
-### Channel Comments
-
-**Note:** Channel comments here refers to comments in the **discussion group** associated with your channel.
-
-The bot responds to **anyone** when mentioned in the discussion group:
-- `@bot_username your question`
-- `skynet, help me with this`
-- `скайнет, что это?`
-
-**Important:** If your channel doesn't have a discussion group enabled, the bot cannot receive or respond to messages from that channel.
-
-### Commands
-- `/start` - Start the bot and see welcome message
-- `/clear` - Clear conversation history for current chat
-- `/chats` - List all active chats with message counts
-- `/channels` - List monitored channels where bot is admin
-- `/add_channel <id>` - Add a channel to monitored list
-- `/remove_channel <id>` - Remove a channel from monitored list
-- `/help` - Show help message
-
-## Configuration
+   **Or using docker build directly:**
+   ```bash
+   docker build -t skynet_claude_bot .
+   docker run -d \
+     --name skynet_claude_bot \
+     --network host \
+     --env-file .env \
+     --restart always \
+     -v $(pwd)/conversations:/app/conversations \
+     skynet_claude_bot
+   ```
 
 ### Environment Variables
 
-| Variable | Description | Required | Default |
-|----------|-------------|----------|---------|
-| `TG_TOKEN` | Telegram Bot API token | Yes | - |
-| `TG_PROXY` | SOCKS5 proxy URL | No | - |
-| `OMNIROUTE_BASE_URL` | OmniRoute API endpoint | Yes | - |
-| `OMNIROUTE_MODEL` | Model to use | No | `kr/claude-sonnet-4.5` |
-| `OMNIROUTE_API_KEY` | OmniRoute API key | Yes | - |
-| `ALLOWED_USERS` | User IDs for private chat access | No | (all users) |
+Create `.env` file with your credentials:
 
-**Note:** `ALLOWED_USERS` only applies to private chats. In groups and channel discussion groups, the bot responds to anyone when mentioned.
+```env
+# Telegram Bot Token (from @BotFather)
+TG_TOKEN=your_telegram_bot_token
 
-### Using with Tor
+# SOCKS5 proxy URL (Tor) - optional, leave empty if not needed
+TG_PROXY=socks5://127.0.0.1:9150
 
-If Telegram API is blocked in your region:
+# OmniRoute API endpoint
+OMNIROUTE_BASE_URL=https://your-omniroute-instance/v1
 
-1. Install Tor Browser or Tor service
-2. Set `TG_PROXY=socks5://127.0.0.1:9150` (Tor Browser) or `socks5://127.0.0.1:9050` (Tor service)
-3. Restart the bot
+# OmniRoute API key
+OMNIROUTE_API_KEY=your_omniroute_api_key
 
-**Note:** The bot automatically falls back to direct connection if proxy is unavailable.
+# Model to use (optional, defaults to kr/claude-sonnet-4.5)
+OMNIROUTE_MODEL=kr/claude-sonnet-4.5
 
-## Development
+# User IDs for private chat access (comma-separated, optional)
+# Example: ALLOWED_USERS=123456789,987654321
+ALLOWED_USERS=
+```
+
+## 📋 Bot Setup Guide
+
+### 1. Disable Privacy Mode
+
+For the bot to work in groups and channels, **Privacy Mode must be disabled**:
+
+1. Send `/mybots` to @BotFather
+2. Select your bot → `Bot Settings` → `Group Privacy`
+3. Set to **DISABLED**
+
+### 2. Channel Setup (Important!)
+
+Telegram bots cannot receive messages directly from channels. To use the bot with a channel:
+
+1. Enable discussion group for your channel
+2. Add bot as admin to the **discussion group**
+3. Users comment on posts and mention: `@botname`, `skynet`, or `скайнет`
+
+**The bot only works through the discussion group, not the channel itself.**
+
+## 💬 Usage
+
+### Private Chats
+- Only users in `ALLOWED_USERS` can interact
+- Bot responds to all messages from allowed users
+
+### Group/Channel Discussion Groups
+- Bot responds to **anyone** when mentioned
+- Mention formats: `@botname`, `skynet`, `скайнет`
+
+### Available Commands
+
+| Command | Description |
+|---------|-------------|
+| `/start` | Start the bot and see welcome message |
+| `/help` | Show help message |
+| `/clear` | Clear conversation history for current chat |
+| `/chats` | List all active chats with message counts |
+| `/channels` | List monitored channels where bot is admin |
+| `/add_channel <id>` | Add a channel to monitored list |
+| `/remove_channel <id>` | Remove a channel from monitored list |
+
+### User Management (Private Chat Only)
+
+| Command | Description |
+|---------|-------------|
+| `/user_list` | List allowed users |
+| `/user_add <id>` | Add user to allowed list |
+| `/user_del <id>` | Remove user from allowed list |
+
+**Note:** Channel management and user management commands only work in private chats.
+
+## 🛠️ Development
 
 ### Local Setup
 
 ```bash
 python3 -m venv venv
-source venv/bin/activate
+source venv/bin/activate  # On Windows: venv\Scripts\activate
 pip install -r requirements.txt
 python main.py
 ```
@@ -152,7 +155,7 @@ python main.py
 pytest -v
 ```
 
-Tests are automatically run when the Docker container starts. If tests fail, the bot won't start.
+Tests run automatically on Docker startup. If tests fail, the bot won't start.
 
 ### Project Structure
 
@@ -163,74 +166,90 @@ claude_bot/
 ├── claude_client.py     # OmniRoute API client
 ├── entrypoint.sh        # Docker entrypoint with test runner
 ├── requirements.txt     # Python dependencies
-├── Dockerfile          # Docker image with pytest
-├── test_*.py           # Test files (31 tests)
-├── .env.example        # Environment template
-└── conversations/      # Saved conversations (persistent)
+├── Dockerfile           # Docker image definition
+├── docker-compose.yml   # Docker Compose configuration
+├── test_*.py            # Test files (51 tests)
+├── .env.example         # Environment template
+└── conversations/       # Saved conversations (persistent)
 ```
 
-## Testing
+## 🧪 Testing
 
 The bot includes comprehensive test coverage:
+
 - **11 tests** for Claude client (API, conversation management)
 - **13 tests** for handlers (commands, mentions, permissions)
 - **7 tests** for main (proxy, initialization, error handling)
 
 All tests run automatically on container startup using pytest.
 
-## OmniRoute
+## 🌐 OmniRoute
 
 This bot uses [OmniRoute](https://github.com/diegosouzapw/OmniRoute) as an AI gateway. OmniRoute provides:
+
 - Universal API proxy for 60+ AI providers
 - Automatic fallback between providers
 - Free and low-cost model routing
 - OpenAI-compatible API
 
-## Troubleshooting
+## 🐳 Docker Deployment
+
+```bash
+# Build and run
+docker compose up -d
+
+# View logs
+docker compose logs -f
+
+# Restart bot
+docker compose restart
+
+# Stop bot
+docker compose down
+```
+
+## 🔧 Troubleshooting
 
 ### Bot doesn't respond in groups
-1. Check Privacy Mode is **disabled** in @BotFather
-2. Remove bot from group and add again
+
+1. Verify Privacy Mode is **disabled** in @BotFather
+2. Remove and re-add the bot to the group
 3. Ensure bot is mentioned: `@bot_username message`
-4. Check logs: `docker logs skynet_claude_bot`
+4. Check logs: `docker compose logs`
 
 ### Bot doesn't respond in channel comments
 
-**Important:** Telegram bots cannot receive messages from channels directly. The bot only works through the **discussion group**.
+**Important:** Telegram bots cannot receive messages from channels directly.
 
-1. Verify your channel has a discussion group enabled (Settings → Group → Discussion group)
-2. Bot must be admin in the **discussion group** (not just the channel)
-3. Check Privacy Mode is **disabled** in @BotFather
-4. Check logs for incoming messages: `docker logs skynet_claude_bot --tail 50`
-5. Ensure you're mentioning the bot in discussion group comments: `@botname message`
-
-If your channel doesn't have a discussion group, the bot cannot receive messages from it.
+1. Verify your channel has a discussion group enabled
+2. Bot must be admin in the **discussion group**
+3. Check Privacy Mode is **disabled**
+4. Ensure you're mentioning the bot in discussion group comments
 
 ### Connection timeout
+
 - Ensure Tor is running if using proxy
 - Check `TG_PROXY` is correct (9150 for Tor Browser, 9050 for Tor service)
 - Verify proxy: `curl --socks5 127.0.0.1:9150 https://api.telegram.org`
 
 ### OmniRoute errors
+
 - Verify `OMNIROUTE_API_KEY` is valid
 - Check `OMNIROUTE_BASE_URL` is accessible
 - Test: `curl -H "Authorization: Bearer <KEY>" <BASE_URL>/models`
 
-### Tests failing on startup
-- Check logs: `docker logs skynet_claude_bot`
-- Run tests locally: `pytest -v`
-- Ensure all dependencies are installed
-
-## License
+## 📄 License
 
 MIT
 
-## Contributing
+## 👥 Contributing
 
 Pull requests are welcome! For major changes, please open an issue first.
 
-## Acknowledgments
+## 🙏 Acknowledgments
 
 - [aiogram](https://github.com/aiogram/aiogram) - Telegram Bot framework
 - [OmniRoute](https://github.com/diegosouzapw/OmniRoute) - AI gateway
 - [Anthropic Claude](https://www.anthropic.com/) - AI model
+
+## 📄 License
