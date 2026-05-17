@@ -311,7 +311,16 @@ async def cmd_user_add(message: Message):
         await message.answer("Ошибка: ID пользователя должен быть числом")
         return
 
-    result = claude.add_user(user_id)
+    # Получаем username пользователя через Telegram API
+    try:
+        chat = await message.bot.get_chat(user_id)
+        username = chat.username or ""
+        logger.info(f"Got username for user {user_id}: {username}")
+    except Exception as e:
+        logger.warning(f"Could not fetch username for user {user_id}: {e}")
+        username = ""
+
+    result = claude.add_user(user_id, username)
     logger.info(f"add_user({user_id}) returned: {result}")
 
     if result:
@@ -380,11 +389,14 @@ async def cmd_users_list(message: Message):
             response += f"- {uid}\n"
         response += "\n"
 
-    # Пользователи из users.json
+    # Пользователи из users.json (с username)
     if allowed:
         response += "Из users.json:\n"
-        for uid in sorted(allowed):
-            response += f"- {uid}\n"
+        for uid, username in sorted(allowed.items()):
+            if username:
+                response += f"- {uid} (@{username})\n"
+            else:
+                response += f"- {uid}\n"
 
     await message.answer(response, parse_mode=None)
 

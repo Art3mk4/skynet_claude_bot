@@ -2,7 +2,7 @@ import os
 import json
 import logging
 from pathlib import Path
-from typing import Dict, List, Set
+from typing import Dict, List, Set, Tuple
 from openai import AsyncOpenAI
 
 logger = logging.getLogger(__name__)
@@ -21,7 +21,8 @@ class ClaudeClient:
         )
         self.conversations: Dict[int, List[dict]] = {}
         self.monitored_channels: Set[int] = set()
-        self.allowed_users: Set[int] = set()
+        # users.json: {"users": [{"id": 123, "username": "user1"}]}
+        self.allowed_users: Dict[int, str] = {}
         self.conversations_dir = Path("conversations")
         self.channels_file = self.conversations_dir / "channels.json"
         self.users_file = self.conversations_dir / "users.json"
@@ -113,7 +114,14 @@ class ClaudeClient:
             try:
                 with open(self.users_file, 'r', encoding='utf-8') as f:
                     data = json.load(f)
-                    self.allowed_users = set(data.get('users', []))
+                    users_list = data.get('users', [])
+                    # Support both old format [123, 456] and new format [{id: 123, username: "user"}]
+                    if users_list and isinstance(users_list[0], int):
+                        # Old format: [123, 456]
+                        self.allowed_users = {uid: "" for uid in users_list}
+                    else:
+                        # New format: [{"id": 123, "username": "user1"}]
+                        self.allowed_users = {u['id']: u.get('username', '') for u in users_list}
                 logger.info(f"Loaded {len(self.allowed_users)} allowed users")
             except Exception as e:
                 logger.error(f"Error loading users file: {e}")
@@ -122,24 +130,26 @@ class ClaudeClient:
         """Сохраняет список разрешенных пользователей"""
         try:
             with open(self.users_file, 'w', encoding='utf-8') as f:
-                json.dump({'users': list(self.allowed_users)}, f, ensure_ascii=False, indent=2)
+                # Convert dict to list of dicts
+                users_list = [{"id": uid, "username": uname} for uid, uname in self.allowed_users.items()]
+                json.dump({'users': users_list}, f, ensure_ascii=False, indent=2)
         except Exception as e:
             logger.error(f"Error saving users file: {e}")
 
-    def add_user(self, user_id: int) -> bool:
+    def add_user(self, user_id: int, username: str = "") -> bool:
         """Добавляет пользователя в список разрешенных"""
         if user_id in self.allowed_users:
             return False
-        self.allowed_users.add(user_id)
+        self.allowed_users[user_id] = username
         self._save_allowed_users()
-        logger.info(f"Added user {user_id} to allowed users")
+        logger.info(f"Added user {user_id} ({username}) to allowed users")
         return True
 
     def remove_user(self, user_id: int) -> bool:
         """Удаляет пользователя из списка разрешенных"""
         if user_id not in self.allowed_users:
             return False
-        self.allowed_users.discard(user_id)
+        del self.allowed_users[user_id]
         self._save_allowed_users()
         logger.info(f"Removed user {user_id} from allowed users")
         return True
@@ -148,8 +158,8 @@ class ClaudeClient:
         """Проверяет, разрешен ли пользователь (из users.json)"""
         return user_id in self.allowed_users
 
-    def get_allowed_users(self) -> Set[int]:
-        """Возвращает список разрешенных пользователей"""
+    def get_allowed_users(self) -> Dict[int, str]:
+        """Возвращает словарь разрешенных пользователей {id: username}"""
         return self.allowed_users.copy()
 
     def get_active_chats(self) -> Dict[int, int]:
