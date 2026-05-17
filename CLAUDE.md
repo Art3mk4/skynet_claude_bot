@@ -46,10 +46,20 @@ For group/channel support, **Privacy Mode must be disabled** in @BotFather:
 - Bot responds to **anyone** when mentioned (`@botname`, `skynet`, `скайнет`)
 - `ALLOWED_USERS` does not apply here
 
+**Important:** For channels, the bot only works through the **discussion group**, not the channel itself. Telegram bots cannot receive messages directly from channels - even if added as admin.
+
+To use the bot in a channel:
+1. Enable discussion group for your channel
+2. Add bot as admin to the **discussion group**
+3. Users must comment on posts and mention `@botname`, `skynet`, or `скайнет`
+
 ### Commands
 - `/start` — Welcome message
 - `/clear` — Clear conversation history
 - `/chats` — List active chats with message counts
+- `/channels` — List monitored channels (admin status)
+- `/add_channel <id>` — Add a channel to monitored list
+- `/remove_channel <id>` — Remove a channel from monitored list
 - `/help` — Show help
 
 ## Testing
@@ -77,3 +87,4 @@ For group/channel support, **Privacy Mode must be disabled** in @BotFather:
 - `venv/` is gitignored
 - Uses `OMNIROUTE_API_KEY` and `OMNIROUTE_BASE_URL` (OpenAI-compatible wrapper)
 - Bot name is "SkyNet"
+- Channels require discussion group setup - bot cannot receive messages directly from channels

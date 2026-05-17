@@ -66,10 +66,18 @@ For the bot to work in groups and channels, you must disable Privacy Mode in @Bo
 4. Set to **DISABLED**
 
 ### Channel Setup
-To use the bot in channel comments:
-1. Add the bot as an administrator to your channel
-2. Add the bot as an administrator to the channel's discussion group
-3. Give the bot permissions to read and send messages
+
+**Important:** Telegram bots cannot receive messages directly from channels. To make the bot respond in channels, you need to set up a **discussion group**.
+
+1. Create or select a discussion group for your channel
+2. Add the bot as an administrator to the **discussion group**
+3. Add the bot as an administrator to the **channel** (optional, only if you want to use /channels command)
+4. Give the bot permissions to read and send messages in the discussion group
+
+**How it works:**
+- Bot receives messages from the **discussion group**, not the channel itself
+- Users must comment on channel posts and mention `@botname`, `skynet`, or `скайнет`
+- Bot will respond only to mentions in the discussion group comments
 
 ## Usage
 
@@ -83,7 +91,15 @@ The bot responds to **anyone** when mentioned (ignores `ALLOWED_USERS` in groups
 - `скайнет, что это?`
 
 ### Channel Comments
-Same as group chat - responds to anyone when mentioned in comments.
+
+**Note:** Channel comments here refers to comments in the **discussion group** associated with your channel.
+
+The bot responds to **anyone** when mentioned in the discussion group:
+- `@bot_username your question`
+- `skynet, help me with this`
+- `скайнет, что это?`
+
+**Important:** If your channel doesn't have a discussion group enabled, the bot cannot receive or respond to messages from that channel.
 
 ### Commands
 - `/start` - Start the bot and see welcome message
@@ -107,7 +123,7 @@ Same as group chat - responds to anyone when mentioned in comments.
 | `OMNIROUTE_API_KEY` | OmniRoute API key | Yes | - |
 | `ALLOWED_USERS` | User IDs for private chat access | No | (all users) |
 
-**Note:** `ALLOWED_USERS` only applies to private chats. In groups and channels, the bot responds to anyone when mentioned.
+**Note:** `ALLOWED_USERS` only applies to private chats. In groups and channel discussion groups, the bot responds to anyone when mentioned.
 
 ### Using with Tor
 
@@ -179,9 +195,16 @@ This bot uses [OmniRoute](https://github.com/diegosouzapw/OmniRoute) as an AI ga
 4. Check logs: `docker logs skynet_claude_bot`
 
 ### Bot doesn't respond in channel comments
-1. Bot must be admin in both channel AND discussion group
-2. Check logs for incoming messages: `docker logs skynet_claude_bot --tail 50`
-3. Ensure you're mentioning the bot in comments
+
+**Important:** Telegram bots cannot receive messages from channels directly. The bot only works through the **discussion group**.
+
+1. Verify your channel has a discussion group enabled (Settings → Group → Discussion group)
+2. Bot must be admin in the **discussion group** (not just the channel)
+3. Check Privacy Mode is **disabled** in @BotFather
+4. Check logs for incoming messages: `docker logs skynet_claude_bot --tail 50`
+5. Ensure you're mentioning the bot in discussion group comments: `@botname message`
+
+If your channel doesn't have a discussion group, the bot cannot receive messages from it.
 
 ### Connection timeout
 - Ensure Tor is running if using proxy
