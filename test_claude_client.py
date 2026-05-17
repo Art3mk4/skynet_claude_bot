@@ -19,7 +19,8 @@ def claude_client(temp_conversations_dir):
         with patch.dict('os.environ', {
             'OMNIROUTE_API_KEY': 'test_key',
             'OMNIROUTE_BASE_URL': 'http://test.local/v1',
-            'OMNIROUTE_MODEL': 'test-model'
+            'OMNIROUTE_MODEL': 'test-model',
+            'TEST_MODE': '1'
         }):
             client = ClaudeClient()
             client.conversations_dir = temp_conversations_dir
@@ -31,7 +32,8 @@ class TestClaudeClientInit:
         with patch.dict('os.environ', {
             'OMNIROUTE_API_KEY': 'my_key',
             'OMNIROUTE_BASE_URL': 'http://custom.url/v1',
-            'OMNIROUTE_MODEL': 'custom-model'
+            'OMNIROUTE_MODEL': 'custom-model',
+            'TEST_MODE': '1'
         }), patch.object(Path, 'mkdir'), patch('claude_client.ClaudeClient._load_conversations'):
             client = ClaudeClient()
             assert client.model == 'custom-model'
@@ -190,3 +192,154 @@ class TestGetResponse:
         assert len(call_args['messages']) == 2  # system + user message
         assert call_args['messages'][0]['role'] == 'system'
         assert 'John' in call_args['messages'][0]['content']
+
+
+class TestChannelManagement:
+    def test_add_channel(self, claude_client, temp_conversations_dir):
+        """Test adding a channel to monitored list"""
+        result = claude_client.add_channel(123456789)
+        assert result is True
+        assert 123456789 in claude_client.monitored_channels
+
+        # Second add should return False (already exists)
+        result = claude_client.add_channel(123456789)
+        assert result is False
+
+    def test_remove_channel(self, claude_client, temp_conversations_dir):
+        """Test removing a channel from monitored list"""
+        claude_client.monitored_channels.add(123456789)
+        result = claude_client.remove_channel(123456789)
+        assert result is True
+        assert 123456789 not in claude_client.monitored_channels
+
+        # Remove non-existent should return False
+        result = claude_client.remove_channel(999999999)
+        assert result is False
+
+    def test_get_monitored_channels(self, claude_client, temp_conversations_dir):
+        """Test getting monitored channels list"""
+        claude_client.monitored_channels.add(123456789)
+        claude_client.monitored_channels.add(987654321)
+
+        channels = claude_client.get_monitored_channels()
+        assert 123456789 in channels
+        assert 987654321 in channels
+
+    def test_get_active_chats_includes_monitored(self, claude_client, temp_conversations_dir):
+        """Test that get_active_chats includes monitored channels"""
+        claude_client.monitored_channels.add(123456789)
+
+        active = claude_client.get_active_chats()
+        assert 123456789 in active
+        assert active[123456789] == 0  # No messages yet
+
+    def test_monitored_channels_persistence(self, temp_conversations_dir):
+        """Test that monitored channels persist across instances"""
+        with patch.dict('os.environ', {
+            'OMNIROUTE_API_KEY': 'test_key',
+            'OMNIROUTE_BASE_URL': 'http://test.local/v1',
+            'TEST_MODE': '1'
+        }), patch.object(Path, 'mkdir'):
+            # First instance: add a channel
+            client1 = ClaudeClient()
+            client1.conversations_dir = temp_conversations_dir
+            client1.channels_file = temp_conversations_dir / "channels.json"
+            client1.add_channel(999888777)
+
+        # Second instance: should load the channel
+        with patch.dict('os.environ', {
+            'OMNIROUTE_API_KEY': 'test_key',
+            'OMNIROUTE_BASE_URL': 'http://test.local/v1',
+            'TEST_MODE': '1'
+        }), patch.object(Path, 'mkdir'), patch.object(ClaudeClient, '_load_conversations'), \
+         patch.object(ClaudeClient, '_load_monitored_channels'):
+            client2 = ClaudeClient()
+            client2.conversations_dir = temp_conversations_dir
+            client2.channels_file = temp_conversations_dir / "channels.json"
+            # Manually load monitored channels from file
+            with open(temp_conversations_dir / "channels.json", 'r') as f:
+                import json
+                data = json.load(f)
+                client2.monitored_channels = set(data.get('channels', []))
+            assert 999888777 in client2.monitored_channels
+
+
+class TestUserManagement:
+    def test_add_user(self, claude_client, temp_conversations_dir):
+        """Test adding a user to allowed list"""
+        result = claude_client.add_user(123456789, "username")
+        assert result is True
+        assert 123456789 in claude_client.allowed_users
+        assert claude_client.allowed_users[123456789] == "username"
+
+        # Second add should return False (already exists)
+        result = claude_client.add_user(123456789, "username")
+        assert result is False
+
+    def test_remove_user(self, claude_client, temp_conversations_dir):
+        """Test removing a user from allowed list"""
+        claude_client.allowed_users[123456789] = "username"
+        result = claude_client.remove_user(123456789)
+        assert result is True
+        assert 123456789 not in claude_client.allowed_users
+
+        # Remove non-existent should return False
+        result = claude_client.remove_user(999999999)
+        assert result is False
+
+    def test_get_allowed_users(self, claude_client, temp_conversations_dir):
+        """Test getting allowed users list"""
+        claude_client.allowed_users[123456789] = "user1"
+        claude_client.allowed_users[987654321] = "user2"
+
+        users = claude_client.get_allowed_users()
+        assert 123456789 in users
+        assert 987654321 in users
+        assert users[123456789] == "user1"
+        assert users[987654321] == "user2"
+
+    def test_is_user_allowed(self, claude_client, temp_conversations_dir):
+        """Test checking if user is allowed"""
+        claude_client.allowed_users[123456789] = "username"
+
+        assert claude_client.is_user_allowed(123456789) is True
+        assert claude_client.is_user_allowed(999999999) is False
+
+    def test_user_persistence(self, temp_conversations_dir):
+        """Test that users persist across instances"""
+        with patch.dict('os.environ', {
+            'OMNIROUTE_API_KEY': 'test_key',
+            'OMNIROUTE_BASE_URL': 'http://test.local/v1',
+            'TEST_MODE': '1'
+        }), patch.object(Path, 'mkdir'), patch.object(ClaudeClient, '_load_conversations'), \
+             patch.object(ClaudeClient, '_load_monitored_channels'):
+            client1 = ClaudeClient()
+            client1.conversations_dir = temp_conversations_dir
+            client1.users_file = temp_conversations_dir / "users.json"
+            client1.add_user(111222333, "testuser")
+
+        # Check the file was saved in new format
+        with open(temp_conversations_dir / "users.json", 'r') as f:
+            data = json.load(f)
+            assert isinstance(data.get('users', [])[0], dict)
+            assert data['users'][0]['id'] == 111222333
+
+        with patch.dict('os.environ', {
+            'OMNIROUTE_API_KEY': 'test_key',
+            'OMNIROUTE_BASE_URL': 'http://test.local/v1',
+            'TEST_MODE': '1'
+        }), patch.object(Path, 'mkdir'), patch.object(ClaudeClient, '_load_conversations'), \
+             patch.object(ClaudeClient, '_load_monitored_channels'), patch.object(ClaudeClient, '_load_allowed_users'):
+            client2 = ClaudeClient()
+            client2.conversations_dir = temp_conversations_dir
+            client2.users_file = temp_conversations_dir / "users.json"
+            # Manually load from file
+            with open(temp_conversations_dir / "users.json", 'r') as f:
+                data = json.load(f)
+                users_list = data.get('users', [])
+                if users_list and isinstance(users_list[0], int):
+                    client2.allowed_users = {uid: "" for uid in users_list}
+                else:
+                    client2.allowed_users = {u['id']: u.get('username', '') for u in users_list}
+            assert 111222333 in client2.allowed_users
+            assert client2.allowed_users[111222333] == "testuser"

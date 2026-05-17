@@ -20,11 +20,13 @@ async def log_updates(handler, event: Update, data: dict):
         chat_type = None
         user_id = None
         text = None
+
         if event.message:
             chat_id = event.message.chat.id
             chat_type = event.message.chat.type
             user_id = event.message.from_user.id if event.message.from_user else None
             text = event.message.text[:50] if event.message.text else "[no text]"
+
         logger.info(f"📨 Update {event.update_id}: type={event.event_type}, chat_id={chat_id}, chat_type={chat_type}, user_id={user_id}, text={text}")
     except Exception as e:
         logger.error(f"Error in middleware: {e}")
