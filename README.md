@@ -4,7 +4,7 @@
 
 ![Python](https://img.shields.io/badge/python-3.10+-blue.svg)
 ![License](https://img.shields.io/badge/license-MIT-green.svg)
-![Tests](https://img.shields.io/badge/tests-31-passing-brightgreen.svg)
+![Tests](https://img.shields.io/badge/tests-51-passing-brightgreen.svg)
 
 AI-powered Telegram bot using Claude Sonnet 4.5 through OmniRoute gateway.
 
@@ -19,7 +19,7 @@ AI-powered Telegram bot using Claude Sonnet 4.5 through OmniRoute gateway.
 - **Channel integration** - works through discussion groups
 - **Tor support** - SOCKS5 proxy with automatic fallback
 - **Docker-ready** - containerized deployment
-- **Tested** - 31 automated tests on startup
+- **Tested** - 51 automated tests on startup
 
 ## 🚀 Quick Start
 
@@ -44,21 +44,47 @@ AI-powered Telegram bot using Claude Sonnet 4.5 through OmniRoute gateway.
    # Edit .env with your credentials
    ```
 
-3. **Start with Docker**
+3. **Start with Docker Compose (recommended)**
    ```bash
    docker compose up -d
    ```
 
+   **Or using docker build directly:**
+   ```bash
+   docker build -t skynet_claude_bot .
+   docker run -d \
+     --name skynet_claude_bot \
+     --network host \
+     --env-file .env \
+     --restart always \
+     -v $(pwd)/conversations:/app/conversations \
+     skynet_claude_bot
+   ```
+
 ### Environment Variables
 
-| Variable | Description | Required |
-|----------|-------------|----------|
-| `TG_TOKEN` | Telegram Bot API token | Yes |
-| `OMNIROUTE_BASE_URL` | OmniRoute API endpoint | Yes |
-| `OMNIROUTE_API_KEY` | OmniRoute API key | Yes |
-| `TG_PROXY` | SOCKS5 proxy URL (Tor) | No |
-| `OMNIROUTE_MODEL` | Model to use | No (default: `kr/claude-sonnet-4.5`) |
-| `ALLOWED_USERS` | Comma-separated user IDs for private chats | No |
+Create `.env` file with your credentials:
+
+```env
+# Telegram Bot Token (from @BotFather)
+TG_TOKEN=your_telegram_bot_token
+
+# SOCKS5 proxy URL (Tor) - optional, leave empty if not needed
+TG_PROXY=socks5://127.0.0.1:9150
+
+# OmniRoute API endpoint
+OMNIROUTE_BASE_URL=https://your-omniroute-instance/v1
+
+# OmniRoute API key
+OMNIROUTE_API_KEY=your_omniroute_api_key
+
+# Model to use (optional, defaults to kr/claude-sonnet-4.5)
+OMNIROUTE_MODEL=kr/claude-sonnet-4.5
+
+# User IDs for private chat access (comma-separated, optional)
+# Example: ALLOWED_USERS=123456789,987654321
+ALLOWED_USERS=
+```
 
 ## 📋 Bot Setup Guide
 
@@ -94,15 +120,23 @@ Telegram bots cannot receive messages directly from channels. To use the bot wit
 
 | Command | Description |
 |---------|-------------|
-| `/start` | Welcome message |
-| `/help` | Show help |
-| `/clear` | Clear conversation history |
-| `/chats` | List active chats with message counts |
-| `/channels` | List monitored channels (admin status) |
-| `/add_channel <id>` | Add channel to monitored list |
-| `/remove_channel <id>` | Remove channel from monitored list |
+| `/start` | Start the bot and see welcome message |
+| `/help` | Show help message |
+| `/clear` | Clear conversation history for current chat |
+| `/chats` | List all active chats with message counts |
+| `/channels` | List monitored channels where bot is admin |
+| `/add_channel <id>` | Add a channel to monitored list |
+| `/remove_channel <id>` | Remove a channel from monitored list |
 
-**Note:** Channel management commands (`/channels`, `/add_channel`, `/remove_channel`) only work in private chats.
+### User Management (Private Chat Only)
+
+| Command | Description |
+|---------|-------------|
+| `/users` | List allowed users |
+| `/user_add <id>` | Add user to allowed list |
+| `/user_del <id>` | Remove user from allowed list |
+
+**Note:** Channel management and user management commands only work in private chats.
 
 ## 🛠️ Development
 
@@ -134,7 +168,7 @@ claude_bot/
 ├── requirements.txt     # Python dependencies
 ├── Dockerfile           # Docker image definition
 ├── docker-compose.yml   # Docker Compose configuration
-├── test_*.py            # Test files (31 tests)
+├── test_*.py            # Test files (51 tests)
 ├── .env.example         # Environment template
 └── conversations/       # Saved conversations (persistent)
 ```
