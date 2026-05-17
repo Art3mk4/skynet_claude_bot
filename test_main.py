@@ -203,7 +203,7 @@ class TestLogUpdatesMiddleware:
         message.text = None
         message.bot = Mock()
 
-        handler = AsyncMock()
+        handler = AsyncMock(return_value=None)
         event = Mock()
         event.update_id = 4
         event.event_type = "message"
