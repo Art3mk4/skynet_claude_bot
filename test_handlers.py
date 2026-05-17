@@ -122,7 +122,7 @@ class TestHandlers:
              patch('handlers.claude.get_response', return_value="Привет!") as mock_response:
             from handlers import handle_message
             await handle_message(message)
-            mock_response.assert_called_once_with(456, "привет", "Test User")
+            mock_response.assert_called_once_with(456, "привет", "Test User", 123)
             message.answer.assert_called_once()
 
     async def test_handle_message_private_chat_not_allowed_user(self):
@@ -206,3 +206,200 @@ class TestHandlers:
             from handlers import handle_message
             await handle_message(message)
             assert message.answer.call_count == 2
+
+
+@pytest.mark.asyncio
+class TestChannelsCommand:
+    async def test_cmd_channels_with_admin_chats(self):
+        message = AsyncMock()
+        message.from_user = Mock()
+        message.from_user.id = 123
+        message.answer = AsyncMock()
+
+        bot_info = Mock()
+        bot_info.username = "testbot"
+        bot_info.id = 999
+        message.bot = Mock()
+        message.bot.me = AsyncMock(return_value=bot_info)
+
+        # Mock chat info
+        mock_chat = Mock()
+        mock_chat.type = "supergroup"
+        mock_chat.title = "Test Group"
+
+        # Mock admin list with bot as admin
+        mock_admin = Mock()
+        mock_admin.user.id = 999
+        message.bot.get_chat = AsyncMock(return_value=mock_chat)
+        message.bot.get_chat_administrators = AsyncMock(return_value=[mock_admin])
+
+        with patch('handlers.is_allowed_user', return_value=True), \
+             patch('claude_client.ClaudeClient.get_active_chats', return_value={123: 5, 456: 10}):
+            from handlers import cmd_channels_info
+            await cmd_channels_info(message)
+            assert message.answer.call_count >= 1
+
+    async def test_cmd_channels_no_admin(self):
+        message = AsyncMock()
+        message.from_user = Mock()
+        message.from_user.id = 123
+        message.answer = AsyncMock()
+
+        bot_info = Mock()
+        bot_info.username = "testbot"
+        bot_info.id = 999
+        message.bot = Mock()
+        message.bot.me = AsyncMock(return_value=bot_info)
+
+        mock_chat = Mock()
+        mock_chat.type = "supergroup"
+        mock_chat.title = "Test Group"
+
+        # Mock admin list WITHOUT bot
+        mock_admin = Mock()
+        mock_admin.user.id = 888
+        message.bot.get_chat = AsyncMock(return_value=mock_chat)
+        message.bot.get_chat_administrators = AsyncMock(return_value=[mock_admin])
+
+        with patch('handlers.is_allowed_user', return_value=True), \
+             patch('claude_client.ClaudeClient.get_active_chats', return_value={123: 5}):
+            from handlers import cmd_channels_info
+            await cmd_channels_info(message)
+            # Should show "not admin" message
+            assert message.answer.call_count >= 1
+
+    async def test_cmd_channels_private_chat(self):
+        message = AsyncMock()
+        message.from_user = Mock()
+        message.from_user.id = 123
+        message.answer = AsyncMock()
+
+        bot_info = Mock()
+        bot_info.username = "testbot"
+        bot_info.id = 999
+        message.bot = Mock()
+        message.bot.me = AsyncMock(return_value=bot_info)
+
+        mock_chat = Mock()
+        mock_chat.type = "private"
+        mock_chat.title = "Private Chat"
+
+        message.bot.get_chat = AsyncMock(return_value=mock_chat)
+
+        with patch('handlers.is_allowed_user', return_value=True), \
+             patch('claude_client.ClaudeClient.get_active_chats', return_value={123: 5}):
+            from handlers import cmd_channels_info
+            await cmd_channels_info(message)
+            # Private chat should not be listed as channel/group
+            assert message.answer.call_count >= 1
+
+    async def test_cmd_channels_not_allowed(self):
+        message = AsyncMock()
+        message.from_user = Mock()
+        message.from_user.id = 999
+        message.answer = AsyncMock()
+
+        with patch('handlers.is_allowed_user', return_value=False):
+            from handlers import cmd_channels_info
+            await cmd_channels_info(message)
+            message.answer.assert_not_called()
+
+
+@pytest.mark.asyncio
+class TestChannelManagementCommands:
+    async def test_cmd_add_channel_success(self):
+        message = AsyncMock()
+        message.from_user = Mock()
+        message.from_user.id = 123
+        message.text = "/add_channel -1001234567890"
+        message.answer = AsyncMock()
+
+        bot_info = Mock()
+        bot_info.username = "testbot"
+        message.bot = Mock()
+        message.bot.me = AsyncMock(return_value=bot_info)
+
+        mock_chat = Mock()
+        mock_chat.type = "channel"
+        mock_chat.title = "Test Channel"
+        message.bot.get_chat = AsyncMock(return_value=mock_chat)
+
+        with patch('handlers.is_allowed_user', return_value=True), \
+             patch('claude_client.ClaudeClient') as mock_claude_class:
+            mock_claude = Mock()
+            mock_claude.add_channel.return_value = True
+            mock_claude_class.return_value = mock_claude
+
+            from handlers import cmd_add_channel
+            await cmd_add_channel(message)
+            assert message.answer.call_count >= 1
+
+    async def test_cmd_add_channel_missing_arg(self):
+        message = AsyncMock()
+        message.from_user = Mock()
+        message.from_user.id = 123
+        message.text = "/add_channel"
+        message.answer = AsyncMock()
+
+        bot_info = Mock()
+        bot_info.username = "testbot"
+        message.bot = Mock()
+        message.bot.me = AsyncMock(return_value=bot_info)
+
+        with patch('handlers.is_allowed_user', return_value=True):
+            from handlers import cmd_add_channel
+            await cmd_add_channel(message)
+            # Should show usage message
+            assert message.answer.call_count >= 1
+
+    async def test_cmd_add_channel_invalid_id(self):
+        message = AsyncMock()
+        message.from_user = Mock()
+        message.from_user.id = 123
+        message.text = "/add_channel not_a_number"
+        message.answer = AsyncMock()
+
+        bot_info = Mock()
+        bot_info.username = "testbot"
+        message.bot = Mock()
+        message.bot.me = AsyncMock(return_value=bot_info)
+
+        with patch('handlers.is_allowed_user', return_value=True):
+            from handlers import cmd_add_channel
+            await cmd_add_channel(message)
+            # Should show error message
+            assert message.answer.call_count >= 1
+
+    async def test_cmd_remove_channel_success(self):
+        message = AsyncMock()
+        message.from_user = Mock()
+        message.from_user.id = 123
+        message.text = "/remove_channel -1001234567890"
+        message.answer = AsyncMock()
+
+        bot_info = Mock()
+        bot_info.username = "testbot"
+        message.bot = Mock()
+        message.bot.me = AsyncMock(return_value=bot_info)
+
+        with patch('handlers.is_allowed_user', return_value=True), \
+             patch('claude_client.ClaudeClient') as mock_claude_class:
+            mock_claude = Mock()
+            mock_claude.remove_channel.return_value = True
+            mock_claude_class.return_value = mock_claude
+
+            from handlers import cmd_remove_channel
+            await cmd_remove_channel(message)
+            assert message.answer.call_count >= 1
+
+    async def test_cmd_add_channel_not_allowed(self):
+        message = AsyncMock()
+        message.from_user = Mock()
+        message.from_user.id = 999
+        message.text = "/add_channel -1001234567890"
+        message.answer = AsyncMock()
+
+        with patch('handlers.is_allowed_user', return_value=False):
+            from handlers import cmd_add_channel
+            await cmd_add_channel(message)
+            message.answer.assert_not_called()

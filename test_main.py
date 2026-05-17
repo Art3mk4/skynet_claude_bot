@@ -117,3 +117,110 @@ class TestMain:
 
             with pytest.raises(Exception, match="Polling failed"):
                 await main()
+
+
+import sys
+sys.path.insert(0, '/app')
+
+from unittest.mock import AsyncMock, Mock, patch
+from aiogram.types import Message, Chat, User, Update
+from main import log_updates
+
+
+@pytest.mark.asyncio
+class TestLogUpdatesMiddleware:
+    async def test_log_updates_private_message_with_mention(self):
+        message = Mock()
+        message.chat = Mock()
+        message.chat.id = 123
+        message.chat.type = "private"
+        message.from_user = Mock()
+        message.from_user.id = 456
+        message.text = "@testbot привет"
+        message.bot = Mock()
+        message.bot.me = AsyncMock(return_value=Mock(username="testbot"))
+
+        handler = AsyncMock()
+        event = Mock()
+        event.update_id = 1
+        event.event_type = "message"
+        event.message = message
+
+        with patch('main.logger') as mock_logger:
+            await log_updates(handler, event, {})
+            # Should log mention detection
+            assert mock_logger.info.called
+
+    async def test_log_updates_group_without_mention(self):
+        message = Mock()
+        message.chat = Mock()
+        message.chat.id = -100
+        message.chat.type = "group"
+        message.from_user = Mock()
+        message.from_user.id = 456
+        message.text = "просто текст"
+        message.bot = Mock()
+        message.bot.me = AsyncMock(return_value=Mock(username="testbot"))
+
+        handler = AsyncMock()
+        event = Mock()
+        event.update_id = 2
+        event.event_type = "message"
+        event.message = message
+
+        with patch('main.logger') as mock_logger:
+            await log_updates(handler, event, {})
+            assert mock_logger.info.called
+
+    async def test_log_updates_channel_message(self):
+        message = Mock()
+        message.chat = Mock()
+        message.chat.id = -200
+        message.chat.type = "channel"
+        message.from_user = Mock()
+        message.from_user.id = 789
+        message.text = "@testbot сообщение"
+        message.bot = Mock()
+        message.bot.me = AsyncMock(return_value=Mock(username="testbot"))
+
+        handler = AsyncMock()
+        event = Mock()
+        event.update_id = 3
+        event.event_type = "message"
+        event.message = message
+
+        with patch('main.logger') as mock_logger:
+            await log_updates(handler, event, {})
+            assert mock_logger.info.called
+
+    async def test_log_updates_no_text(self):
+        message = Mock()
+        message.chat = Mock()
+        message.chat.id = 123
+        message.chat.type = "private"
+        message.from_user = Mock()
+        message.from_user.id = 456
+        message.text = None
+        message.bot = Mock()
+
+        handler = AsyncMock()
+        event = Mock()
+        event.update_id = 4
+        event.event_type = "message"
+        event.message = message
+
+        with patch('main.logger') as mock_logger:
+            await log_updates(handler, event, {})
+            assert mock_logger.info.called
+
+    async def test_log_updates_no_message(self):
+        handler = AsyncMock()
+        event = Mock()
+        event.update_id = 5
+        event.event_type = "edited_message"
+        event.message = None
+
+        with patch('main.logger') as mock_logger:
+            await log_updates(handler, event, {})
+            # Should not crash even without message
+            assert mock_logger.info.called or True

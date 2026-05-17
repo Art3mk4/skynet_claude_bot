@@ -64,7 +64,8 @@ async def cmd_start(message: Message):
         "Команды:\n"
         "/start - Начать\n"
         "/clear - Очистить историю диалога\n"
-        "/chats - Список активных чатов\n"
+        "/chats - Список активных чатов с историей\n"
+        "/channels - Список каналов и групп, где я администратор\n"
         "/help - Помощь"
     )
 
@@ -94,6 +95,7 @@ async def cmd_help(message: Message):
         "Команды:\n"
         "/clear - Очистить историю\n"
         "/chats - Список активных чатов\n"
+        "/channels - Мониторируемые каналы\n"
         "/help - Эта справка"
     )
 
@@ -110,12 +112,157 @@ async def cmd_chats(message: Message):
         await message.answer("Нет активных чатов с историей")
         return
 
-    response = "📊 Активные чаты:\n\n"
+    response = "📊 Активные чаты (история):\n\n"
     for chat_id, msg_count in active_chats.items():
         chat_type = "Личный чат" if chat_id > 0 else "Группа"
         response += f"• Chat ID: `{chat_id}` ({chat_type})\n  Сообщений в истории: {msg_count}\n\n"
 
+    response += "Используй /channels для просмотра мониторируемых каналов и каналов, где бот администратор."
+
     await message.answer(response)
+
+
+@router.message(Command('channels'))
+async def cmd_channels_info(message: Message):
+    """Показывает мониторируемые каналы и каналы где бот админ"""
+    if not is_allowed_user(message.from_user.id):
+        return
+
+    await message.answer("📊 Получение информации о каналах...", parse_mode=None)
+
+    from claude_client import ClaudeClient
+    claude = ClaudeClient()
+
+    monitored_channels = claude.get_monitored_channels()
+    active_chats = claude.get_active_chats()
+
+    bot_info = await message.bot.me()
+    bot_id = bot_info.id
+
+    response = "Мониторируемые каналы:\n\n"
+
+    if not monitored_channels and not active_chats:
+        await message.answer(
+            "Нет активных чатов и мониторируемых каналов.\n\n"
+            "Для добавления канала используй:\n"
+            "/add_channel <channel_id>\n\n"
+            "Чтобы узнать ID канала:\n"
+            "- Перешли сообщение из канала @userinfobot или @getidsbot\n"
+            "- Или посмотри в URL: https://web.telegram.org/k/#-<channel_id>",
+            parse_mode=None
+        )
+        return
+
+    # Показываем мониторируемые каналы
+    if monitored_channels:
+        response += "Добавленные вручную:\n"
+        for chat_id in monitored_channels:
+            try:
+                chat = await message.bot.get_chat(chat_id)
+                title = chat.title or "Без названия"
+                response += f"- {title}\n  ID: {chat_id}\n  Тип: {chat.type}\n\n"
+            except Exception as e:
+                logger.warning(f"Cannot get chat info for {chat_id}: {e}")
+                response += f"- Unknown channel\n  ID: {chat_id}\n  (не удалось получить данные)\n\n"
+    else:
+        response += "Нет каналов, добавленных вручную.\n\n"
+
+    # Добавляем каналы где бот админ (из истории)
+    admin_channels = []
+    for chat_id in active_chats.keys():
+        if chat_id in monitored_channels:
+            continue  # Уже показан
+        try:
+            chat = await message.bot.get_chat(chat_id)
+            if chat.type in ['supergroup', 'channel']:
+                admins = await message.bot.get_chat_administrators(chat_id)
+                is_admin = any(admin.user.id == bot_id for admin in admins)
+                if is_admin:
+                    admin_channels.append((chat_id, chat.title or "Без названия", chat.type))
+        except Exception as e:
+            logger.debug(f"Cannot check admins for {chat_id}: {e}")
+
+    if admin_channels:
+        response += "\nГде я администратор:\n"
+        for chat_id, title, chat_type in admin_channels:
+            response += f"- {title}\n  ID: {chat_id}\n  Тип: {chat_type}\n\n"
+
+    if len(admin_channels) == 0 and not monitored_channels:
+        response += "Каналов не найдено.\n\n" \
+                   "Бот отвечает в:\n" \
+                   "- Личных чатах с allowed users\n" \
+                   "- Группах и каналах, где его упоминают (@botname, skynet)\n" \
+                   "- Комментариях к постам (если админ discussion group)"
+
+    logger.info(f"Sending /channels response, length={len(response)}")
+    await message.answer(response, parse_mode=None)
+
+
+@router.message(Command('add_channel'))
+async def cmd_add_channel(message: Message):
+    """Добавляет канал в список мониторинга"""
+    if not is_allowed_user(message.from_user.id):
+        return
+
+    # Получаем ID из аргументов
+    args = message.text.split()
+    if len(args) < 2:
+        await message.answer(
+            "Использование: /add_channel <channel_id>\n\n"
+            "Пример: /add_channel -1002952715643"
+        )
+        return
+
+    try:
+        chat_id = int(args[1])
+    except ValueError:
+        await message.answer("Ошибка: ID канала должен быть числом")
+        return
+
+    from claude_client import ClaudeClient
+    claude = ClaudeClient()
+
+    if claude.add_channel(chat_id):
+        await message.answer(f"[OK] Канал {chat_id} добавлен в список мониторинга!", parse_mode=None)
+
+        # Пытаемся получить название канала
+        try:
+            chat = await message.bot.get_chat(chat_id)
+            title = chat.title or "Без названия"
+            await message.answer(f"Название: {title}\nТип: {chat.type}", parse_mode=None)
+        except Exception as e:
+            logger.warning(f"Cannot get chat info for {chat_id}: {e}")
+    else:
+        await message.answer(f"[WARN] Канал {chat_id} уже в списке мониторинга", parse_mode=None)
+
+
+@router.message(Command('remove_channel'))
+async def cmd_remove_channel(message: Message):
+    """Удаляет канал из списка мониторинга"""
+    if not is_allowed_user(message.from_user.id):
+        return
+
+    args = message.text.split()
+    if len(args) < 2:
+        await message.answer(
+            "Использование: /remove_channel <channel_id>\n\n"
+            "Пример: /remove_channel -1002952715643"
+        )
+        return
+
+    try:
+        chat_id = int(args[1])
+    except ValueError:
+        await message.answer("Ошибка: ID канала должен быть числом")
+        return
+
+    from claude_client import ClaudeClient
+    claude = ClaudeClient()
+
+    if claude.remove_channel(chat_id):
+        await message.answer(f"[OK] Канал {chat_id} удален из списка мониторинга!", parse_mode=None)
+    else:
+        await message.answer(f"[WARN] Канал {chat_id} не найден в списке мониторинга", parse_mode=None)
 
 
 @router.message(F.text)
@@ -157,8 +304,9 @@ async def handle_message(message: Message):
     try:
         chat_id = message.chat.id
         user_name = message.from_user.full_name or message.from_user.username or "User"
+        user_id = message.from_user.id
 
-        response = await claude.get_response(chat_id, text, user_name)
+        response = await claude.get_response(chat_id, text, user_name, user_id)
         logger.info(f"✅ Got response from Claude, length: {len(response)}")
 
         # Разбиваем длинные сообщения

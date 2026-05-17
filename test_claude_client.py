@@ -190,3 +190,70 @@ class TestGetResponse:
         assert len(call_args['messages']) == 2  # system + user message
         assert call_args['messages'][0]['role'] == 'system'
         assert 'John' in call_args['messages'][0]['content']
+
+
+class TestChannelManagement:
+    def test_add_channel(self, claude_client, temp_conversations_dir):
+        """Test adding a channel to monitored list"""
+        result = claude_client.add_channel(123456789)
+        assert result is True
+        assert 123456789 in claude_client.monitored_channels
+
+        # Second add should return False (already exists)
+        result = claude_client.add_channel(123456789)
+        assert result is False
+
+    def test_remove_channel(self, claude_client, temp_conversations_dir):
+        """Test removing a channel from monitored list"""
+        claude_client.monitored_channels.add(123456789)
+        result = claude_client.remove_channel(123456789)
+        assert result is True
+        assert 123456789 not in claude_client.monitored_channels
+
+        # Remove non-existent should return False
+        result = claude_client.remove_channel(999999999)
+        assert result is False
+
+    def test_get_monitored_channels(self, claude_client, temp_conversations_dir):
+        """Test getting monitored channels list"""
+        claude_client.monitored_channels.add(123456789)
+        claude_client.monitored_channels.add(987654321)
+
+        channels = claude_client.get_monitored_channels()
+        assert 123456789 in channels
+        assert 987654321 in channels
+
+    def test_get_active_chats_includes_monitored(self, claude_client, temp_conversations_dir):
+        """Test that get_active_chats includes monitored channels"""
+        claude_client.monitored_channels.add(123456789)
+
+        active = claude_client.get_active_chats()
+        assert 123456789 in active
+        assert active[123456789] == 0  # No messages yet
+
+    def test_monitored_channels_persistence(self, temp_conversations_dir):
+        """Test that monitored channels persist across instances"""
+        with patch.dict('os.environ', {
+            'OMNIROUTE_API_KEY': 'test_key',
+            'OMNIROUTE_BASE_URL': 'http://test.local/v1'
+        }), patch.object(Path, 'mkdir'):
+            # First instance: add a channel
+            client1 = ClaudeClient()
+            client1.conversations_dir = temp_conversations_dir
+            client1.channels_file = temp_conversations_dir / "channels.json"
+            client1.add_channel(999888777)
+
+        # Second instance: should load the channel
+        with patch.dict('os.environ', {
+            'OMNIROUTE_API_KEY': 'test_key',
+            'OMNIROUTE_BASE_URL': 'http://test.local/v1'
+        }), patch.object(Path, 'mkdir'), patch.object(ClaudeClient, '_load_conversations'):
+            client2 = ClaudeClient()
+            client2.conversations_dir = temp_conversations_dir
+            client2.channels_file = temp_conversations_dir / "channels.json"
+            # Manually load monitored channels from file
+            with open(temp_conversations_dir / "channels.json", 'r') as f:
+                import json
+                data = json.load(f)
+                client2.monitored_channels = set(data.get('channels', []))
+            assert 999888777 in client2.monitored_channels

@@ -2,7 +2,7 @@ import os
 import json
 import logging
 from pathlib import Path
-from typing import Dict, List
+from typing import Dict, List, Set
 from openai import AsyncOpenAI
 
 logger = logging.getLogger(__name__)
@@ -20,11 +20,14 @@ class ClaudeClient:
             timeout=60.0
         )
         self.conversations: Dict[int, List[dict]] = {}
+        self.monitored_channels: Set[int] = set()
         self.conversations_dir = Path("conversations")
+        self.channels_file = self.conversations_dir / "channels.json"
         self.conversations_dir.mkdir(exist_ok=True)
 
-        # Загружаем сохраненные диалоги
+        # Загружаем сохраненные диалоги и каналы
         self._load_conversations()
+        self._load_monitored_channels()
 
     def _get_conversation_file(self, chat_id: int) -> Path:
         return self.conversations_dir / f"chat_{chat_id}.json"
@@ -60,21 +63,69 @@ class ClaudeClient:
 
         logger.info(f"Cleared conversation for chat {chat_id}")
 
+    def _load_monitored_channels(self):
+        """Загружает список мониторируемых каналов"""
+        if self.channels_file.exists():
+            try:
+                with open(self.channels_file, 'r', encoding='utf-8') as f:
+                    data = json.load(f)
+                    self.monitored_channels = set(data.get('channels', []))
+                logger.info(f"Loaded {len(self.monitored_channels)} monitored channels")
+            except Exception as e:
+                logger.error(f"Error loading channels file: {e}")
+
+    def _save_monitored_channels(self):
+        """Сохраняет список мониторируемых каналов"""
+        try:
+            with open(self.channels_file, 'w', encoding='utf-8') as f:
+                json.dump({'channels': list(self.monitored_channels)}, f, ensure_ascii=False, indent=2)
+        except Exception as e:
+            logger.error(f"Error saving channels file: {e}")
+
+    def add_channel(self, chat_id: int) -> bool:
+        """Добавляет канал в список мониторинга"""
+        if chat_id in self.monitored_channels:
+            return False
+        self.monitored_channels.add(chat_id)
+        self._save_monitored_channels()
+        logger.info(f"Added channel {chat_id} to monitored channels")
+        return True
+
+    def remove_channel(self, chat_id: int) -> bool:
+        """Удаляет канал из списка мониторинга"""
+        if chat_id not in self.monitored_channels:
+            return False
+        self.monitored_channels.discard(chat_id)
+        self._save_monitored_channels()
+        logger.info(f"Removed channel {chat_id} from monitored channels")
+        return True
+
+    def get_monitored_channels(self) -> Set[int]:
+        """Возвращает список мониторируемых каналов"""
+        return self.monitored_channels.copy()
+
     def get_active_chats(self) -> Dict[int, int]:
         """Возвращает словарь активных чатов и количество сообщений в них"""
-        return {chat_id: len(messages) for chat_id, messages in self.conversations.items()}
+        result = {chat_id: len(messages) for chat_id, messages in self.conversations.items()}
+        # Добавляем каналы из мониторинга (даже без истории)
+        for channel_id in self.monitored_channels:
+            if channel_id not in result:
+                result[channel_id] = 0
+        return result
 
-    async def get_response(self, chat_id: int, user_message: str, user_name: str = "User") -> str:
+    async def get_response(self, chat_id: int, user_message: str, user_name: str = "User", user_id: int = None) -> str:
         """Получает ответ от Claude через OmniRoute"""
 
         # Инициализируем историю если нужно
         if chat_id not in self.conversations:
             self.conversations[chat_id] = []
 
-        # Добавляем сообщение пользователя
+        # Добавляем сообщение пользователя с метаданными
         self.conversations[chat_id].append({
             "role": "user",
-            "content": user_message
+            "content": user_message,
+            "user_id": user_id,
+            "user_name": user_name
         })
 
         # Ограничиваем историю последними 20 сообщениями
@@ -102,7 +153,9 @@ class ClaudeClient:
             # Добавляем ответ в историю
             self.conversations[chat_id].append({
                 "role": "assistant",
-                "content": assistant_message
+                "content": assistant_message,
+                "user_id": None,
+                "user_name": "SkyNet"
             })
 
             # Сохраняем диалог

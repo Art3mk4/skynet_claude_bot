@@ -89,6 +89,9 @@ Same as group chat - responds to anyone when mentioned in comments.
 - `/start` - Start the bot and see welcome message
 - `/clear` - Clear conversation history for current chat
 - `/chats` - List all active chats with message counts
+- `/channels` - List monitored channels where bot is admin
+- `/add_channel <id>` - Add a channel to monitored list
+- `/remove_channel <id>` - Remove a channel from monitored list
 - `/help` - Show help message
 
 ## Configuration
