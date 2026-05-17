@@ -27,6 +27,11 @@ This is a Telegram bot using **aiogram 3.x** (async) that proxies requests to an
 - Proxy support: Tor SOCKS5 with direct connection fallback
 - User whitelist via `ALLOWED_USERS` env var
 
+**Mention Detection in Groups/Channels:**
+- Checks `message.entities` for Telegram MessageEntity mentions (most reliable)
+- Falls back to text search for `@username`, `skynet`, `скайнет`
+- Supports mentions with or without @ symbol
+
 ## Bot Behavior
 
 ### Privacy Mode
