@@ -27,10 +27,28 @@ async def is_mention(message: Message) -> bool:
     bot_username = bot_info.username
     text_lower = message.text.lower()
 
-    # Проверка @username или просто имени
-    return (f'@{bot_username}'.lower() in text_lower or
-            'skynet' in text_lower or
-            'скайнет' in text_lower)
+    # Проверка через entities (наиболее надежный способ)
+    # Используем getattr для совместимости с моками в тестах
+    if getattr(message, 'entities', None):
+        for entity in message.entities:
+            if entity.type == "mention":
+                # Извлекаем username из текста по позиции
+                mentioned_text = message.text[entity.offset:entity.offset + entity.length]
+                if mentioned_text.lower() == f'@{bot_username}'.lower():
+                    logger.info(f".is_mention: found @ mention via entities: {mentioned_text}")
+                    return True
+
+    # Проверка @username в тексте
+    is_mention_username = f'@{bot_username}'.lower() in text_lower
+
+    # Также проверяем без @ (вдруг приходит без собачки)
+    is_mention_username_no_at = bot_username.lower() in text_lower
+
+    is_mention_name = 'skynet' in text_lower or 'скайнет' in text_lower
+
+    logger.info(f".is_mention check: username='{bot_username}', text='{message.text[:50]}', entities={bool(getattr(message, 'entities', None))}, mention_username={is_mention_username}, mention_no_at={is_mention_username_no_at}, mention_name={is_mention_name}")
+
+    return is_mention_username or is_mention_username_no_at or is_mention_name
 
 
 @router.message(CommandStart())
@@ -102,7 +120,12 @@ async def cmd_chats(message: Message):
 
 @router.message(F.text)
 async def handle_message(message: Message):
-    logger.info(f"📩 Message received: user={message.from_user.id}, chat={message.chat.id}, type={message.chat.type}, text='{message.text[:50]}'")
+    # Детальное логирование для отладки
+    logger.info(f"📩 Message received:")
+    logger.info(f"  user.id={message.from_user.id}, user.name={message.from_user.full_name}")
+    logger.info(f"  chat.id={message.chat.id}, chat.type={message.chat.type}, chat.title={getattr(message.chat, 'title', 'N/A')}")
+    logger.info(f"  text='{message.text}'")
+    logger.info(f"  entities={message.entities}")
 
     # В личке проверяем ALLOWED_USERS
     is_private = message.chat.type == 'private'
