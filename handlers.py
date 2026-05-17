@@ -14,16 +14,20 @@ claude = ClaudeClient()
 def is_allowed_user(user_id: int) -> bool:
     # Сначала проверяем ALLOWED_USERS env (приоритет)
     allowed = os.getenv('ALLOWED_USERS', '')
-    logger.info(f"is_allowed_user({user_id}): ALLOWED_USERS='{allowed}'")
     if allowed:
-        # Если env задан, проверяем только его
-        result = str(user_id) in allowed.split(',')
-        logger.info(f"  -> result={result} (from env)")
-        return result
+        if str(user_id) in allowed.split(','):
+            logger.info(f"is_allowed_user({user_id}): allowed via env")
+            return True
 
-    # Если env не задан, разрешаем всех пользователей (без ограничений)
-    logger.info(f"  -> result=True (no restrictions)")
-    return True
+    # Затем проверяем users.json для дополнительных разрешенных пользователей
+    from claude_client import ClaudeClient
+    client = ClaudeClient()
+    if user_id in client.allowed_users:
+        logger.info(f"is_allowed_user({user_id}): allowed via users.json")
+        return True
+
+    logger.info(f"is_allowed_user({user_id}): not allowed")
+    return False
 
 
 async def is_mention(message: Message) -> bool:
@@ -429,6 +433,11 @@ async def handle_message(message: Message):
     # В группах/каналах отвечаем только при упоминании
     if not is_private and not await is_mention(message):
         logger.info("Not a mention in group/channel/comments, ignoring")
+        return
+
+    # Проверяем разрешение пользователя в группах/каналах
+    if not is_private and not is_allowed_user(message.from_user.id):
+        logger.info(f"User {message.from_user.id} not allowed in group {message.chat.id}")
         return
 
     # Убираем упоминание из текста

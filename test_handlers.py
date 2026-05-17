@@ -2,18 +2,45 @@ import pytest
 from unittest.mock import AsyncMock, Mock, patch
 from aiogram.types import Message, Chat, User
 from handlers import is_allowed_user, is_mention, router
+from claude_client import ClaudeClient
 
 
 class TestIsAllowedUser:
     def test_no_allowed_users_env(self):
-        with patch('os.getenv', return_value=''):
-            assert is_allowed_user(123) is True
-            assert is_allowed_user(456) is True
+        with patch('os.getenv', return_value=''), \
+             patch('claude_client.ClaudeClient') as MockClient:
+            mock_client = MockClient.return_value
+            mock_client.allowed_users = {}
+            assert is_allowed_user(123) is False
+            assert is_allowed_user(456) is False
 
     def test_with_allowed_users(self):
-        with patch('os.getenv', return_value='123,456,789'):
+        with patch('os.getenv', return_value='123,456,789'), \
+             patch('claude_client.ClaudeClient') as MockClient:
+            mock_client = MockClient.return_value
+            mock_client.allowed_users = {}
             assert is_allowed_user(123) is True
             assert is_allowed_user(456) is True
+            assert is_allowed_user(999) is False
+
+    def test_users_json_allowed(self):
+        with patch('os.getenv', return_value=''), \
+             patch('claude_client.ClaudeClient') as MockClient:
+            mock_client = MockClient.return_value
+            mock_client.allowed_users = {111: 'user1'}
+            assert is_allowed_user(111) is True
+            assert is_allowed_user(222) is False
+
+    def test_env_takes_priority(self):
+        with patch('os.getenv', return_value='333'), \
+             patch('claude_client.ClaudeClient') as MockClient:
+            mock_client = MockClient.return_value
+            mock_client.allowed_users = {111: 'user1'}
+            # User 333 is in env - allowed
+            assert is_allowed_user(333) is True
+            # User 111 is in users.json but NOT in env - also allowed (users.json adds to allowed list)
+            assert is_allowed_user(111) is True
+            # User 999 is not in either - denied
             assert is_allowed_user(999) is False
 
 
@@ -158,7 +185,8 @@ class TestHandlers:
         message.bot = Mock()
         message.bot.me = AsyncMock(return_value=bot_info)
 
-        with patch('handlers.claude.get_response', return_value="Привет!"):
+        with patch('handlers.claude.get_response', return_value="Привет!"), \
+             patch('handlers.is_allowed_user', return_value=True):
             from handlers import handle_message
             await handle_message(message)
             message.answer.assert_called_once()
