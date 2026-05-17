@@ -244,4 +244,12 @@ MIT
 
 ## 👥 Contributing
 
-Pull requests are welcome! For major changes, please open an issue first to discuss what you would like to change.
+Pull requests are welcome! For major changes, please open an issue first.
+
+## 🙏 Acknowledgments
+
+- [aiogram](https://github.com/aiogram/aiogram) - Telegram Bot framework
+- [OmniRoute](https://github.com/diegosouzapw/OmniRoute) - AI gateway
+- [Anthropic Claude](https://www.anthropic.com/) - AI model
+
+## 📄 License
