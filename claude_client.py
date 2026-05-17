@@ -21,13 +21,16 @@ class ClaudeClient:
         )
         self.conversations: Dict[int, List[dict]] = {}
         self.monitored_channels: Set[int] = set()
+        self.allowed_users: Set[int] = set()
         self.conversations_dir = Path("conversations")
         self.channels_file = self.conversations_dir / "channels.json"
+        self.users_file = self.conversations_dir / "users.json"
         self.conversations_dir.mkdir(exist_ok=True)
 
-        # Загружаем сохраненные диалоги и каналы
+        # Загружаем сохраненные диалоги, каналы и пользователей
         self._load_conversations()
         self._load_monitored_channels()
+        self._load_allowed_users()
 
     def _get_conversation_file(self, chat_id: int) -> Path:
         return self.conversations_dir / f"chat_{chat_id}.json"
@@ -103,6 +106,51 @@ class ClaudeClient:
     def get_monitored_channels(self) -> Set[int]:
         """Возвращает список мониторируемых каналов"""
         return self.monitored_channels.copy()
+
+    def _load_allowed_users(self):
+        """Загружает список разрешенных пользователей из users.json"""
+        if self.users_file.exists():
+            try:
+                with open(self.users_file, 'r', encoding='utf-8') as f:
+                    data = json.load(f)
+                    self.allowed_users = set(data.get('users', []))
+                logger.info(f"Loaded {len(self.allowed_users)} allowed users")
+            except Exception as e:
+                logger.error(f"Error loading users file: {e}")
+
+    def _save_allowed_users(self):
+        """Сохраняет список разрешенных пользователей"""
+        try:
+            with open(self.users_file, 'w', encoding='utf-8') as f:
+                json.dump({'users': list(self.allowed_users)}, f, ensure_ascii=False, indent=2)
+        except Exception as e:
+            logger.error(f"Error saving users file: {e}")
+
+    def add_user(self, user_id: int) -> bool:
+        """Добавляет пользователя в список разрешенных"""
+        if user_id in self.allowed_users:
+            return False
+        self.allowed_users.add(user_id)
+        self._save_allowed_users()
+        logger.info(f"Added user {user_id} to allowed users")
+        return True
+
+    def remove_user(self, user_id: int) -> bool:
+        """Удаляет пользователя из списка разрешенных"""
+        if user_id not in self.allowed_users:
+            return False
+        self.allowed_users.discard(user_id)
+        self._save_allowed_users()
+        logger.info(f"Removed user {user_id} from allowed users")
+        return True
+
+    def is_user_allowed(self, user_id: int) -> bool:
+        """Проверяет, разрешен ли пользователь (из users.json)"""
+        return user_id in self.allowed_users
+
+    def get_allowed_users(self) -> Set[int]:
+        """Возвращает список разрешенных пользователей"""
+        return self.allowed_users.copy()
 
     def get_active_chats(self) -> Dict[int, int]:
         """Возвращает словарь активных чатов и количество сообщений в них"""

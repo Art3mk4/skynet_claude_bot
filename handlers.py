@@ -12,10 +12,14 @@ claude = ClaudeClient()
 
 
 def is_allowed_user(user_id: int) -> bool:
+    # Сначала проверяем ALLOWED_USERS env (приоритет)
     allowed = os.getenv('ALLOWED_USERS', '')
-    if not allowed:
-        return True
-    return str(user_id) in allowed.split(',')
+    if allowed:
+        # Если env задан, проверяем только его
+        return str(user_id) in allowed.split(',')
+
+    # Если env не задан, разрешаем всех пользователей (без ограничений)
+    return True
 
 
 async def is_mention(message: Message) -> bool:
@@ -96,6 +100,9 @@ async def cmd_help(message: Message):
         "/clear - Очистить историю\n"
         "/chats - Список активных чатов\n"
         "/channels - Мониторируемые каналы\n"
+        "/users - Список разрешенных пользователей\n"
+        "/user_add <id> - Добавить пользователя\n"
+        "/user_del <id> - Удалить пользователя\n"
         "/help - Эта справка"
     )
 
@@ -263,6 +270,98 @@ async def cmd_remove_channel(message: Message):
         await message.answer(f"[OK] Канал {chat_id} удален из списка мониторинга!", parse_mode=None)
     else:
         await message.answer(f"[WARN] Канал {chat_id} не найден в списке мониторинга", parse_mode=None)
+
+
+@router.message(Command('user_add'))
+async def cmd_user_add(message: Message):
+    """Добавляет пользователя в список разрешенных"""
+    if not is_allowed_user(message.from_user.id):
+        return
+
+    args = message.text.split()
+    if len(args) < 2:
+        await message.answer(
+            "Использование: /user_add <user_id>\n\n"
+            "Пример: /user_add 123456789"
+        )
+        return
+
+    try:
+        user_id = int(args[1])
+    except ValueError:
+        await message.answer("Ошибка: ID пользователя должен быть числом")
+        return
+
+    from claude_client import ClaudeClient
+    claude = ClaudeClient()
+
+    if claude.add_user(user_id):
+        await message.answer(f"[OK] Пользователь {user_id} добавлен в список разрешенных!", parse_mode=None)
+    else:
+        await message.answer(f"[WARN] Пользователь {user_id} уже в списке разрешенных", parse_mode=None)
+
+
+@router.message(Command('user_del'))
+async def cmd_user_del(message: Message):
+    """Удаляет пользователя из списка разрешенных"""
+    if not is_allowed_user(message.from_user.id):
+        return
+
+    args = message.text.split()
+    if len(args) < 2:
+        await message.answer(
+            "Использование: /user_del <user_id>\n\n"
+            "Пример: /user_del 123456789"
+        )
+        return
+
+    try:
+        user_id = int(args[1])
+    except ValueError:
+        await message.answer("Ошибка: ID пользователя должен быть числом")
+        return
+
+    from claude_client import ClaudeClient
+    claude = ClaudeClient()
+
+    if claude.remove_user(user_id):
+        await message.answer(f"[OK] Пользователь {user_id} удален из списка разрешенных!", parse_mode=None)
+    else:
+        await message.answer(f"[WARN] Пользователь {user_id} не найден в списке разрешенных", parse_mode=None)
+
+
+@router.message(Command('users'))
+async def cmd_users_list(message: Message):
+    """Список разрешенных пользователей"""
+    if not is_allowed_user(message.from_user.id):
+        return
+
+    from claude_client import ClaudeClient
+    claude = ClaudeClient()
+
+    allowed = claude.get_allowed_users()
+    env_allowed = os.getenv('ALLOWED_USERS', '')
+
+    response = "✅ Разрешенные пользователи:\n\n"
+
+    if not allowed and not env_allowed:
+        response += "Нет разрешенных пользователей.\n" \
+                   "Используйте /user_add <id> чтобы добавить пользователя."
+
+    # Пользователи из env
+    if env_allowed:
+        response += "Из окружения (ALLOWED_USERS):\n"
+        for uid in env_allowed.split(','):
+            response += f"- {uid}\n"
+        response += "\n"
+
+    # Пользователи из users.json
+    if allowed:
+        response += "Из users.json:\n"
+        for uid in sorted(allowed):
+            response += f"- {uid}\n"
+
+    await message.answer(response, parse_mode=None)
 
 
 @router.message(F.text)
