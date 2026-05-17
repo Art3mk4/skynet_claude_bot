@@ -29,29 +29,26 @@ async def log_updates(handler, event: Update, data: dict):
             user_id = event.message.from_user.id if event.message.from_user else None
             text = event.message.text[:50] if event.message.text else "[no text]"
 
-            # Проверяем упоминание бота
-            if event.message.text and event.message.bot:
-                try:
-                    bot_info = await event.message.bot.me()
-                    bot_username = bot_info.username
-                    text_lower = event.message.text.lower()
+            # Получаем username бота один раз из data (уже кэшировано aiogram)
+            bot_username = data.get('bot').me.username if data.get('bot') and hasattr(data.get('bot'), 'me') and data.get('bot').me else ""
 
-                    # Проверка через entities (наиболее надежный способ)
-                    if getattr(event.message, 'entities', None):
-                        for entity in event.message.entities:
-                            if entity.type == "mention":
-                                mentioned_text = event.message.text[entity.offset:entity.offset + entity.length]
-                                if mentioned_text.lower() == f'@{bot_username}'.lower():
-                                    is_mention = True
-                                    break
+            if bot_username:
+                text_lower = event.message.text.lower() if event.message.text else ""
 
-                    # Проверка @username в тексте
-                    if not is_mention:
-                        is_mention = f'@{bot_username}'.lower() in text_lower or \
-                                     'skynet' in text_lower or \
-                                     'скайнет' in text_lower
-                except Exception as e:
-                    logger.debug(f"Error checking mention: {e}")
+                # Проверка через entities (наиболее надежный способ)
+                if getattr(event.message, 'entities', None):
+                    for entity in event.message.entities:
+                        if entity.type == "mention":
+                            mentioned_text = event.message.text[entity.offset:entity.offset + entity.length] if event.message.text else ""
+                            if mentioned_text.lower() == f'@{bot_username}'.lower():
+                                is_mention = True
+                                break
+
+                # Проверка @username в тексте
+                if not is_mention:
+                    is_mention = f'@{bot_username}'.lower() in text_lower or \
+                                 'skynet' in text_lower or \
+                                 'скайнет' in text_lower
 
         logger.info(f"📨 Update {event.update_id}: type={event.event_type}, chat_id={chat_id}, chat_type={chat_type}, user_id={user_id}, text={text}, bot@{bot_username}, mention={is_mention}")
     except Exception as e:

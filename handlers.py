@@ -2,7 +2,7 @@ import os
 import logging
 from aiogram import Router, F
 from aiogram.types import Message
-from aiogram.filters import CommandStart, Command
+from aiogram.filters import CommandStart, Command, CommandObject
 from claude_client import ClaudeClient
 
 router = Router()
@@ -14,11 +14,15 @@ claude = ClaudeClient()
 def is_allowed_user(user_id: int) -> bool:
     # Сначала проверяем ALLOWED_USERS env (приоритет)
     allowed = os.getenv('ALLOWED_USERS', '')
+    logger.info(f"is_allowed_user({user_id}): ALLOWED_USERS='{allowed}'")
     if allowed:
         # Если env задан, проверяем только его
-        return str(user_id) in allowed.split(',')
+        result = str(user_id) in allowed.split(',')
+        logger.info(f"  -> result={result} (from env)")
+        return result
 
     # Если env не задан, разрешаем всех пользователей (без ограничений)
+    logger.info(f"  -> result=True (no restrictions)")
     return True
 
 
@@ -277,11 +281,21 @@ async def cmd_remove_channel(message: Message):
 
 @router.message(Command('user_add'))
 async def cmd_user_add(message: Message):
-    """Добавляет пользователя в список разрешенных"""
+    """Добавляет пользователя в список разрешенных (только в личке)"""
+    logger.info(f"/user_add command from user {message.from_user.id}, text: {message.text}")
+
+    # Проверяем что это личный чат
+    if message.chat.type != 'private':
+        await message.answer("Эта команда доступна только в личных сообщениях", parse_mode=None)
+        return
+
     if not is_allowed_user(message.from_user.id):
+        logger.warning(f"User {message.from_user.id} is not allowed to use /user_add")
+        await message.answer("У вас нет доступа к этой команде", parse_mode=None)
         return
 
     args = message.text.split()
+    logger.info(f"Parsed args: {args}")
     if len(args) < 2:
         await message.answer(
             "Использование: /user_add <user_id>\n\n"
@@ -291,14 +305,16 @@ async def cmd_user_add(message: Message):
 
     try:
         user_id = int(args[1])
-    except ValueError:
+        logger.info(f"Parsed user_id: {user_id}")
+    except ValueError as e:
+        logger.error(f"Failed to parse user_id from '{args[1]}': {e}")
         await message.answer("Ошибка: ID пользователя должен быть числом")
         return
 
-    from claude_client import ClaudeClient
-    claude = ClaudeClient()
+    result = claude.add_user(user_id)
+    logger.info(f"add_user({user_id}) returned: {result}")
 
-    if claude.add_user(user_id):
+    if result:
         await message.answer(f"[OK] Пользователь {user_id} добавлен в список разрешенных!", parse_mode=None)
     else:
         await message.answer(f"[WARN] Пользователь {user_id} уже в списке разрешенных", parse_mode=None)
@@ -306,8 +322,14 @@ async def cmd_user_add(message: Message):
 
 @router.message(Command('user_del'))
 async def cmd_user_del(message: Message):
-    """Удаляет пользователя из списка разрешенных"""
+    """Удаляет пользователя из списка разрешенных (только в личке)"""
+    # Проверяем что это личный чат
+    if message.chat.type != 'private':
+        await message.answer("Эта команда доступна только в личных сообщениях", parse_mode=None)
+        return
+
     if not is_allowed_user(message.from_user.id):
+        await message.answer("У вас нет доступа к этой команде", parse_mode=None)
         return
 
     args = message.text.split()
@@ -324,23 +346,23 @@ async def cmd_user_del(message: Message):
         await message.answer("Ошибка: ID пользователя должен быть числом")
         return
 
-    from claude_client import ClaudeClient
-    claude = ClaudeClient()
-
     if claude.remove_user(user_id):
         await message.answer(f"[OK] Пользователь {user_id} удален из списка разрешенных!", parse_mode=None)
     else:
         await message.answer(f"[WARN] Пользователь {user_id} не найден в списке разрешенных", parse_mode=None)
 
 
-@router.message(Command('users'))
+@router.message(Command('user_list'))
 async def cmd_users_list(message: Message):
-    """Список разрешенных пользователей"""
-    if not is_allowed_user(message.from_user.id):
+    """Список разрешенных пользователей (только в личке)"""
+    # Проверяем что это личный чат
+    if message.chat.type != 'private':
+        await message.answer("Эта команда доступна только в личных сообщениях", parse_mode=None)
         return
 
-    from claude_client import ClaudeClient
-    claude = ClaudeClient()
+    if not is_allowed_user(message.from_user.id):
+        await message.answer("У вас нет доступа к этой команде", parse_mode=None)
+        return
 
     allowed = claude.get_allowed_users()
     env_allowed = os.getenv('ALLOWED_USERS', '')
@@ -367,7 +389,7 @@ async def cmd_users_list(message: Message):
     await message.answer(response, parse_mode=None)
 
 
-@router.message(F.text)
+@router.message(F.text, lambda msg: not msg.text.startswith('/'))
 async def handle_message(message: Message):
     # Детальное логирование для отладки
     logger.info(f"📩 Message received:")
