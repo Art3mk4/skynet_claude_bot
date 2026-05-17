@@ -132,7 +132,7 @@ Telegram bots cannot receive messages directly from channels. To use the bot wit
 
 | Command | Description |
 |---------|-------------|
-| `/users` | List allowed users |
+| `/user_list` | List allowed users |
 | `/user_add <id>` | Add user to allowed list |
 | `/user_del <id>` | Remove user from allowed list |
 
