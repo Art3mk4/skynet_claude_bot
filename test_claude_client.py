@@ -39,8 +39,10 @@ class TestClaudeClientInit:
             assert client.model == 'custom-model'
 
     def test_init_with_defaults(self):
-        with patch.dict('os.environ', {}, clear=True), \
-             patch.object(Path, 'mkdir'), \
+        with patch.dict('os.environ', {
+            'OMNIROUTE_API_KEY': 'dummy_key',
+            'TEST_MODE': '1'
+        }), patch.object(Path, 'mkdir'), \
              patch('claude_client.ClaudeClient._load_conversations'):
             client = ClaudeClient()
             assert client.model == 'kr/claude-sonnet-4.5'
@@ -167,8 +169,7 @@ class TestGetResponse:
             await claude_client.get_response(chat_id, "Test", "TestUser")
 
         # Сообщение пользователя должно быть удалено при ошибке
-        assert chat_id not in claude_client.conversations or \
-               len(claude_client.conversations[chat_id]) == 0
+        assert len(claude_client.conversations.get(chat_id, [])) == 0
 
     async def test_get_response_calls_api_correctly(self, claude_client):
         chat_id = 500
@@ -246,21 +247,17 @@ class TestChannelManagement:
             client1.channels_file = temp_conversations_dir / "channels.json"
             client1.add_channel(999888777)
 
-        # Second instance: should load the channel
+        # Second instance: should load the channel via _load_monitored_channels
         with patch.dict('os.environ', {
             'OMNIROUTE_API_KEY': 'test_key',
             'OMNIROUTE_BASE_URL': 'http://test.local/v1',
             'TEST_MODE': '1'
-        }), patch.object(Path, 'mkdir'), patch.object(ClaudeClient, '_load_conversations'), \
-         patch.object(ClaudeClient, '_load_monitored_channels'):
+        }), patch.object(Path, 'mkdir'):
             client2 = ClaudeClient()
             client2.conversations_dir = temp_conversations_dir
             client2.channels_file = temp_conversations_dir / "channels.json"
-            # Manually load monitored channels from file
-            with open(temp_conversations_dir / "channels.json", 'r') as f:
-                import json
-                data = json.load(f)
-                client2.monitored_channels = set(data.get('channels', []))
+            # _load_monitored_channels is called in __init__
+            client2._load_monitored_channels()
             assert 999888777 in client2.monitored_channels
 
 
@@ -311,8 +308,8 @@ class TestUserManagement:
             'OMNIROUTE_API_KEY': 'test_key',
             'OMNIROUTE_BASE_URL': 'http://test.local/v1',
             'TEST_MODE': '1'
-        }), patch.object(Path, 'mkdir'), patch.object(ClaudeClient, '_load_conversations'), \
-             patch.object(ClaudeClient, '_load_monitored_channels'):
+        }), patch.object(Path, 'mkdir'):
+            # First instance: add a user
             client1 = ClaudeClient()
             client1.conversations_dir = temp_conversations_dir
             client1.users_file = temp_conversations_dir / "users.json"
@@ -324,22 +321,15 @@ class TestUserManagement:
             assert isinstance(data.get('users', [])[0], dict)
             assert data['users'][0]['id'] == 111222333
 
+        # Second instance: should load via _load_allowed_users
         with patch.dict('os.environ', {
             'OMNIROUTE_API_KEY': 'test_key',
             'OMNIROUTE_BASE_URL': 'http://test.local/v1',
             'TEST_MODE': '1'
-        }), patch.object(Path, 'mkdir'), patch.object(ClaudeClient, '_load_conversations'), \
-             patch.object(ClaudeClient, '_load_monitored_channels'), patch.object(ClaudeClient, '_load_allowed_users'):
+        }), patch.object(Path, 'mkdir'):
             client2 = ClaudeClient()
             client2.conversations_dir = temp_conversations_dir
             client2.users_file = temp_conversations_dir / "users.json"
-            # Manually load from file
-            with open(temp_conversations_dir / "users.json", 'r') as f:
-                data = json.load(f)
-                users_list = data.get('users', [])
-                if users_list and isinstance(users_list[0], int):
-                    client2.allowed_users = {uid: "" for uid in users_list}
-                else:
-                    client2.allowed_users = {u['id']: u.get('username', '') for u in users_list}
+            client2._load_allowed_users()
             assert 111222333 in client2.allowed_users
             assert client2.allowed_users[111222333] == "testuser"

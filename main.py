@@ -64,7 +64,7 @@ async def main():
             session = AiohttpSession(proxy=proxy)
             test_bot = Bot(token=bot_token, session=session)
             await asyncio.wait_for(test_bot.get_me(), timeout=10)
-            await test_bot.session.close()
+            await session.close()
             logger.info("Proxy connection successful")
         except Exception as e:
             logger.warning(f"Proxy failed ({e}), falling back to direct connection")

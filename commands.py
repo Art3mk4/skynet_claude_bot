@@ -1,4 +1,5 @@
 import logging
+import os
 
 from aiogram import Router
 from aiogram.types import Message
@@ -13,7 +14,9 @@ router = Router()
 
 @router.message(CommandStart())
 async def cmd_start(message: Message):
+    logger.info(f"/start command from user {message.from_user.id}")
     if not is_allowed_user(message.from_user.id):
+        logger.warning(f"User {message.from_user.id} not allowed to use /start")
         await message.answer("У вас нет доступа к этому боту")
         return
 
@@ -37,7 +40,9 @@ async def cmd_start(message: Message):
 
 @router.message(Command('clear'))
 async def cmd_clear(message: Message, claude: ClaudeClient):
+    logger.info(f"/clear command from user {message.from_user.id}, chat={message.chat.id}")
     if not is_allowed_user(message.from_user.id):
+        logger.warning(f"User {message.from_user.id} not allowed to use /clear")
         return
 
     chat_id = message.chat.id
@@ -47,7 +52,9 @@ async def cmd_clear(message: Message, claude: ClaudeClient):
 
 @router.message(Command('help'))
 async def cmd_help(message: Message, claude: ClaudeClient):
+    logger.info(f"/help command from user {message.from_user.id}")
     if not is_allowed_user(message.from_user.id):
+        logger.warning(f"User {message.from_user.id} not allowed to use /help")
         return
 
     await message.answer(
@@ -71,7 +78,9 @@ async def cmd_help(message: Message, claude: ClaudeClient):
 
 @router.message(Command('chats'))
 async def cmd_chats(message: Message, claude: ClaudeClient):
+    logger.info(f"/chats command from user {message.from_user.id}")
     if not is_allowed_user(message.from_user.id):
+        logger.warning(f"User {message.from_user.id} not allowed to use /chats")
         return
 
     active_chats = claude.get_active_chats()
@@ -82,7 +91,12 @@ async def cmd_chats(message: Message, claude: ClaudeClient):
 
     response = "Список активных чатов:\n\n"
     for chat_id, msg_count in active_chats.items():
-        chat_type = "Личный чат" if chat_id > 0 else "Группа"
+        if chat_id > 0:
+            chat_type = "Личный чат"
+        elif chat_id < -1000000000000:
+            chat_type = "Канал"
+        else:
+            chat_type = "Группа"
         response += f"• Chat ID: `{chat_id}` ({chat_type})\n  Сообщений в истории: {msg_count}\n\n"
 
     response += "Используй /channels для просмотра мониторируемых каналов."
@@ -92,7 +106,9 @@ async def cmd_chats(message: Message, claude: ClaudeClient):
 
 @router.message(Command('channels'))
 async def cmd_channels_info(message: Message, claude: ClaudeClient):
+    logger.info(f"/channels command from user {message.from_user.id}")
     if not is_allowed_user(message.from_user.id):
+        logger.warning(f"User {message.from_user.id} not allowed to use /channels")
         return
 
     monitored_channels = claude.get_monitored_channels()
@@ -152,7 +168,9 @@ async def cmd_channels_info(message: Message, claude: ClaudeClient):
 
 @router.message(Command('add_channel'))
 async def cmd_add_channel(message: Message, claude: ClaudeClient):
+    logger.info(f"/add_channel command from user {message.from_user.id}")
     if not is_allowed_user(message.from_user.id):
+        logger.warning(f"User {message.from_user.id} not allowed to use /add_channel")
         return
 
     args = message.text.split()
@@ -184,7 +202,9 @@ async def cmd_add_channel(message: Message, claude: ClaudeClient):
 
 @router.message(Command('remove_channel'))
 async def cmd_remove_channel(message: Message, claude: ClaudeClient):
+    logger.info(f"/remove_channel command from user {message.from_user.id}")
     if not is_allowed_user(message.from_user.id):
+        logger.warning(f"User {message.from_user.id} not allowed to use /remove_channel")
         return
 
     args = message.text.split()
@@ -301,7 +321,7 @@ async def cmd_users_list(message: Message, claude: ClaudeClient):
         return
 
     allowed = claude.get_allowed_users()
-    env_allowed = __import__('os').getenv('ALLOWED_USERS', '')
+    env_allowed = os.getenv('ALLOWED_USERS', '')
 
     response = "Разрешённые пользователи:\n\n"
 

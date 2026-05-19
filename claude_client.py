@@ -10,7 +10,9 @@ logger = logging.getLogger(__name__)
 
 class ClaudeClient:
     def __init__(self):
-        api_key = os.getenv('OMNIROUTE_API_KEY') or 'dummy'
+        api_key = os.getenv('OMNIROUTE_API_KEY')
+        if not api_key:
+            raise ValueError("OMNIROUTE_API_KEY not found in environment")
         base_url = os.getenv('OMNIROUTE_BASE_URL', 'http://localhost:20128/v1')
         self.model = os.getenv('OMNIROUTE_MODEL', 'kr/claude-sonnet-4.5')
 

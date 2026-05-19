@@ -49,9 +49,6 @@ async def handle_message(message: Message, claude: ClaudeClient = None):
         user_name = message.from_user.full_name or message.from_user.username or "User"
         user_id = message.from_user.id
 
-        if claude is None:
-            claude = ClaudeClient()
-
         response = await claude.get_response(chat_id, text, user_name, user_id)
         logger.info(f"Got response from Claude, length: {len(response)}")
 
@@ -78,4 +75,6 @@ def _strip_mentions(text: str, bot_username: str) -> str:
     text = re.sub(r'\bskynet\b', '', text, flags=re.IGNORECASE)
     text = re.sub(r'\bскайнет\b', '', text, flags=re.IGNORECASE)
 
-    return text.strip()
+    # Clean up leftover punctuation and extra spaces
+    text = re.sub(r'[,\s]+', ' ', text).strip()
+    return text

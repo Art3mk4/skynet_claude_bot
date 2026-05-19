@@ -117,6 +117,17 @@ class TestIsMention:
         message.bot.me = AsyncMock(return_value=bot_info)
         assert await is_mention(message) is True
 
+    async def test_mention_with_entities(self):
+        from aiogram.types import MessageEntity
+        message = Mock(spec=Message)
+        message.text = "@testbot привет"
+        message.entities = [MessageEntity(type="mention", offset=0, length=8)]
+        bot_info = Mock()
+        bot_info.username = "testbot"
+        message.bot = Mock()
+        message.bot.me = AsyncMock(return_value=bot_info)
+        assert await is_mention(message) is True
+
     async def test_mention_skynet_english(self):
         message = Mock(spec=Message)
         message.text = "skynet, помоги"
@@ -357,3 +368,111 @@ class TestCmdUsersList:
         with patch('commands.is_allowed_user', return_value=True):
             await cmd_users_list(message, claude=mock_claude)
             message.answer.assert_called_once()
+
+    async def test_empty_list(self, message_factory, mock_claude):
+        message = message_factory(user_id=123)
+        mock_claude.get_allowed_users.return_value = {}
+        with patch('commands.is_allowed_user', return_value=True), \
+             patch.dict('os.environ', {'ALLOWED_USERS': ''}, clear=False):
+            await cmd_users_list(message, claude=mock_claude)
+            assert "Нет разрешённых пользователей" in message.answer.call_args[0][0]
+
+
+# --- _strip_mentions tests ---
+
+class TestStripMentions:
+    def test_remove_username_mention(self):
+        from handlers import _strip_mentions
+        result = _strip_mentions("@testbot привет", "testbot")
+        assert result == "привет"
+
+    def test_remove_skynet_keyword(self):
+        from handlers import _strip_mentions
+        result = _strip_mentions("skynet помоги", "testbot")
+        assert result == "помоги"
+
+    def test_remove_skynet_russian(self):
+        from handlers import _strip_mentions
+        result = _strip_mentions("скайнет, ответь", "testbot")
+        assert result == "ответь"
+
+    def test_case_insensitive_username(self):
+        from handlers import _strip_mentions
+        result = _strip_mentions("@TestBOT привет", "testbot")
+        assert result == "привет"
+
+    def test_case_insensitive_skynet(self):
+        from handlers import _strip_mentions
+        result = _strip_mentions("SKYNET помоги", "testbot")
+        assert result == "помоги"
+
+    def test_combined_removal(self):
+        from handlers import _strip_mentions
+        result = _strip_mentions("@testbot skynet, привет", "testbot")
+        assert result == "привет"
+
+    def test_no_removal_needed(self):
+        from handlers import _strip_mentions
+        result = _strip_mentions("просто текст", "testbot")
+        assert result == "просто текст"
+
+    def test_empty_after_removal(self):
+        from handlers import _strip_mentions
+        result = _strip_mentions("@testbot", "testbot")
+        assert result == ""
+
+
+# --- handle_message error path ---
+
+@pytest.mark.asyncio
+class TestHandleMessageErrors:
+    async def test_api_error_response(self, message_factory, mock_claude):
+        message = message_factory(user_id=123, chat_id=456)
+        with patch('handlers.is_allowed_user', return_value=True), \
+             patch.object(mock_claude, 'get_response', side_effect=Exception("API failed")):
+            await handle_message(message, claude=mock_claude)
+            assert "Произошла ошибка" in message.answer.call_args[0][0]
+
+    async def test_typing_indicator_sent(self, message_factory, mock_claude):
+        message = message_factory(user_id=123, chat_id=456)
+        with patch('handlers.is_allowed_user', return_value=True), \
+             patch.object(mock_claude, 'get_response', return_value="ok"):
+            await handle_message(message, claude=mock_claude)
+            message.chat.send_action.assert_called_once_with("typing")
+
+
+# --- additional command error paths ---
+
+@pytest.mark.asyncio
+class TestCommandErrorPaths:
+    async def test_add_channel_duplicate(self, message_factory, mock_claude):
+        message = message_factory(user_id=123, text="/add_channel -1001234567890")
+        mock_claude.add_channel.return_value = False
+        with patch('commands.is_allowed_user', return_value=True):
+            await cmd_add_channel(message, claude=mock_claude)
+            assert "уже в списке" in message.answer.call_args[0][0]
+
+    async def test_remove_channel_not_found(self, message_factory, mock_claude):
+        message = message_factory(user_id=123, text="/remove_channel -1001234567890")
+        mock_claude.remove_channel.return_value = False
+        with patch('commands.is_allowed_user', return_value=True):
+            await cmd_remove_channel(message, claude=mock_claude)
+            assert "не найден" in message.answer.call_args[0][0]
+
+    async def test_user_del_not_private(self, message_factory, mock_claude):
+        message = message_factory(user_id=123, text="/user_del 999", chat_type='group')
+        await cmd_user_del(message, claude=mock_claude)
+        assert "личн" in message.answer.call_args[0][0].lower()
+
+    async def test_user_del_parse_error(self, message_factory, mock_claude):
+        message = message_factory(user_id=123, text="/user_del abc")
+        with patch('commands.is_allowed_user', return_value=True):
+            await cmd_user_del(message, claude=mock_claude)
+            assert "числом" in message.answer.call_args[0][0]
+
+    async def test_user_del_not_found(self, message_factory, mock_claude):
+        message = message_factory(user_id=123, text="/user_del 999888777")
+        mock_claude.remove_user.return_value = False
+        with patch('commands.is_allowed_user', return_value=True):
+            await cmd_user_del(message, claude=mock_claude)
+            assert "не найден" in message.answer.call_args[0][0]
