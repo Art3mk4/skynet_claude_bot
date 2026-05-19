@@ -4,7 +4,18 @@ from aiogram.types import Message
 from mentions import is_mention
 from permissions import is_allowed_user
 from handlers import handle_message
-from commands import router as commands_router
+from commands import (
+    cmd_start,
+    cmd_clear,
+    cmd_help,
+    cmd_chats,
+    cmd_channels_info,
+    cmd_add_channel,
+    cmd_remove_channel,
+    cmd_user_add,
+    cmd_user_del,
+    cmd_users_list,
+)
 
 
 @pytest.fixture
@@ -185,135 +196,164 @@ class TestHandleMessage:
             message.answer.assert_called_once_with("Да? Чем могу помочь?")
 
 
-# --- Command router tests ---
+# --- Command handler tests ---
 
 @pytest.mark.asyncio
-class TestCommandsRouter:
-    async def test_cmd_start_allowed(self, message_factory, mock_claude):
+class TestCmdStart:
+    async def test_allowed(self, message_factory, mock_claude):
         message = message_factory(user_id=123)
-        handler = commands_router.message.handlers[0][0]  # cmd_start
         with patch('commands.is_allowed_user', return_value=True):
-            await handler(message, claude=mock_claude)
+            await cmd_start(message, claude=mock_claude)
             message.answer.assert_called_once()
             assert "SkyNet" in message.answer.call_args[0][0]
 
-    async def test_cmd_start_not_allowed(self, message_factory, mock_claude):
+    async def test_not_allowed(self, message_factory, mock_claude):
         message = message_factory(user_id=999)
-        handler = commands_router.message.handlers[0][0]
         with patch('commands.is_allowed_user', return_value=False):
-            await handler(message, claude=mock_claude)
+            await cmd_start(message, claude=mock_claude)
             message.answer.assert_called_once_with("У вас нет доступа к этому боту")
 
-    async def test_cmd_clear(self, message_factory, mock_claude):
+
+@pytest.mark.asyncio
+class TestCmdClear:
+    async def test_clear(self, message_factory, mock_claude):
         message = message_factory(user_id=123, chat_id=456)
-        handler = commands_router.message.handlers[1][0]  # cmd_clear
         with patch('commands.is_allowed_user', return_value=True):
-            await handler(message, claude=mock_claude)
+            await cmd_clear(message, claude=mock_claude)
             mock_claude.clear_history.assert_called_once_with(456)
             message.answer.assert_called_once_with("История диалога очищена")
 
-    async def test_cmd_chats(self, message_factory, mock_claude):
+    async def test_not_allowed(self, message_factory, mock_claude):
+        message = message_factory(user_id=999)
+        with patch('commands.is_allowed_user', return_value=False):
+            await cmd_clear(message, claude=mock_claude)
+            message.answer.assert_not_called()
+
+
+@pytest.mark.asyncio
+class TestCmdHelp:
+    async def test_help(self, message_factory, mock_claude):
         message = message_factory(user_id=123)
-        handler = commands_router.message.handlers[2][0]  # cmd_chats
-        mock_claude.get_active_chats.return_value = {123: 5, 456: 10}
         with patch('commands.is_allowed_user', return_value=True):
-            await handler(message, claude=mock_claude)
+            await cmd_help(message, claude=mock_claude)
             message.answer.assert_called_once()
 
-    async def test_cmd_chats_empty(self, message_factory, mock_claude):
+    async def test_not_allowed(self, message_factory, mock_claude):
+        message = message_factory(user_id=999)
+        with patch('commands.is_allowed_user', return_value=False):
+            await cmd_help(message, claude=mock_claude)
+            message.answer.assert_not_called()
+
+
+@pytest.mark.asyncio
+class TestCmdChats:
+    async def test_with_chats(self, message_factory, mock_claude):
         message = message_factory(user_id=123)
-        handler = commands_router.message.handlers[2][0]
+        mock_claude.get_active_chats.return_value = {123: 5, 456: 10}
+        with patch('commands.is_allowed_user', return_value=True):
+            await cmd_chats(message, claude=mock_claude)
+            message.answer.assert_called_once()
+
+    async def test_empty(self, message_factory, mock_claude):
+        message = message_factory(user_id=123)
         mock_claude.get_active_chats.return_value = {}
         with patch('commands.is_allowed_user', return_value=True):
-            await handler(message, claude=mock_claude)
+            await cmd_chats(message, claude=mock_claude)
             message.answer.assert_called_once_with("Нет активных чатов с историей")
 
-    async def test_cmd_channels_info(self, message_factory, mock_claude):
+
+@pytest.mark.asyncio
+class TestCmdChannelsInfo:
+    async def test_empty(self, message_factory, mock_claude):
         message = message_factory(user_id=123)
-        handler = commands_router.message.handlers[3][0]  # cmd_channels_info
         mock_claude.get_monitored_channels.return_value = set()
         mock_claude.get_active_chats.return_value = {}
         with patch('commands.is_allowed_user', return_value=True):
-            await handler(message, claude=mock_claude)
+            await cmd_channels_info(message, claude=mock_claude)
             assert message.answer.call_count >= 1
 
-    async def test_cmd_channels_not_allowed(self, message_factory, mock_claude):
+    async def test_not_allowed(self, message_factory, mock_claude):
         message = message_factory(user_id=999)
-        handler = commands_router.message.handlers[3][0]
         with patch('commands.is_allowed_user', return_value=False):
-            await handler(message, claude=mock_claude)
+            await cmd_channels_info(message, claude=mock_claude)
             message.answer.assert_not_called()
 
-    async def test_cmd_add_channel_success(self, message_factory, mock_claude):
+
+@pytest.mark.asyncio
+class TestCmdAddChannel:
+    async def test_success(self, message_factory, mock_claude):
         message = message_factory(user_id=123, text="/add_channel -1001234567890")
-        handler = commands_router.message.handlers[4][0]  # cmd_add_channel
         mock_chat = Mock()
         mock_chat.type = "channel"
         mock_chat.title = "Test Channel"
         message.bot.get_chat = AsyncMock(return_value=mock_chat)
         mock_claude.add_channel.return_value = True
         with patch('commands.is_allowed_user', return_value=True):
-            await handler(message, claude=mock_claude)
+            await cmd_add_channel(message, claude=mock_claude)
             assert message.answer.call_count >= 1
 
-    async def test_cmd_add_channel_missing_arg(self, message_factory, mock_claude):
+    async def test_missing_arg(self, message_factory, mock_claude):
         message = message_factory(user_id=123, text="/add_channel")
-        handler = commands_router.message.handlers[4][0]
         with patch('commands.is_allowed_user', return_value=True):
-            await handler(message, claude=mock_claude)
+            await cmd_add_channel(message, claude=mock_claude)
             assert message.answer.call_count >= 1
 
-    async def test_cmd_add_channel_invalid_id(self, message_factory, mock_claude):
+    async def test_invalid_id(self, message_factory, mock_claude):
         message = message_factory(user_id=123, text="/add_channel not_a_number")
-        handler = commands_router.message.handlers[4][0]
         with patch('commands.is_allowed_user', return_value=True):
-            await handler(message, claude=mock_claude)
+            await cmd_add_channel(message, claude=mock_claude)
             assert message.answer.call_count >= 1
 
-    async def test_cmd_remove_channel_success(self, message_factory, mock_claude):
-        message = message_factory(user_id=123, text="/remove_channel -1001234567890")
-        handler = commands_router.message.handlers[5][0]  # cmd_remove_channel
-        mock_claude.remove_channel.return_value = True
-        with patch('commands.is_allowed_user', return_value=True):
-            await handler(message, claude=mock_claude)
-            assert message.answer.call_count >= 1
-
-    async def test_cmd_add_channel_not_allowed(self, message_factory, mock_claude):
+    async def test_not_allowed(self, message_factory, mock_claude):
         message = message_factory(user_id=999, text="/add_channel -1001234567890")
-        handler = commands_router.message.handlers[4][0]
         with patch('commands.is_allowed_user', return_value=False):
-            await handler(message, claude=mock_claude)
+            await cmd_add_channel(message, claude=mock_claude)
             message.answer.assert_not_called()
 
-    async def test_cmd_user_add_success(self, message_factory, mock_claude):
+
+@pytest.mark.asyncio
+class TestCmdRemoveChannel:
+    async def test_success(self, message_factory, mock_claude):
+        message = message_factory(user_id=123, text="/remove_channel -1001234567890")
+        mock_claude.remove_channel.return_value = True
+        with patch('commands.is_allowed_user', return_value=True):
+            await cmd_remove_channel(message, claude=mock_claude)
+            assert message.answer.call_count >= 1
+
+
+@pytest.mark.asyncio
+class TestCmdUserAdd:
+    async def test_success(self, message_factory, mock_claude):
         message = message_factory(user_id=123, text="/user_add 999888777")
-        handler = commands_router.message.handlers[6][0]  # cmd_user_add
         mock_chat = Mock()
         mock_chat.username = "newuser"
         message.bot.get_chat = AsyncMock(return_value=mock_chat)
         mock_claude.add_user.return_value = True
         with patch('commands.is_allowed_user', return_value=True):
-            await handler(message, claude=mock_claude)
+            await cmd_user_add(message, claude=mock_claude)
             assert message.answer.call_count >= 1
 
-    async def test_cmd_user_add_not_private(self, message_factory, mock_claude):
+    async def test_not_private(self, message_factory, mock_claude):
         message = message_factory(user_id=123, text="/user_add 999", chat_type='group')
-        handler = commands_router.message.handlers[6][0]
-        await handler(message, claude=mock_claude)
+        await cmd_user_add(message, claude=mock_claude)
         assert "личные сообщения" in message.answer.call_args[0][0]
 
-    async def test_cmd_user_del_success(self, message_factory, mock_claude):
+
+@pytest.mark.asyncio
+class TestCmdUserDel:
+    async def test_success(self, message_factory, mock_claude):
         message = message_factory(user_id=123, text="/user_del 999888777")
-        handler = commands_router.message.handlers[7][0]  # cmd_user_del
         mock_claude.remove_user.return_value = True
         with patch('commands.is_allowed_user', return_value=True):
-            await handler(message, claude=mock_claude)
+            await cmd_user_del(message, claude=mock_claude)
             assert message.answer.call_count >= 1
 
-    async def test_cmd_user_list(self, message_factory, mock_claude):
+
+@pytest.mark.asyncio
+class TestCmdUsersList:
+    async def test_list(self, message_factory, mock_claude):
         message = message_factory(user_id=123)
-        handler = commands_router.message.handlers[8][0]  # cmd_users_list
         mock_claude.get_allowed_users.return_value = {111: "user1", 222: "user2"}
         with patch('commands.is_allowed_user', return_value=True):
-            await handler(message, claude=mock_claude)
+            await cmd_users_list(message, claude=mock_claude)
             message.answer.assert_called_once()
