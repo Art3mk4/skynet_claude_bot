@@ -2,9 +2,9 @@
 
 <div align="center">
 
-![Python](https://img.shields.io/badge/python-3.10+-blue.svg)
+![Python](https://img.shields.io/badge/python-3.12+-blue.svg)
 ![License](https://img.shields.io/badge/license-MIT-green.svg)
-![Tests](https://img.shields.io/badge/tests-51-passing-brightgreen.svg)
+![Tests](https://img.shields.io/badge/tests-68-passing-brightgreen.svg)
 
 AI-powered Telegram bot using Claude Sonnet 4.5 through OmniRoute gateway.
 
@@ -19,7 +19,7 @@ AI-powered Telegram bot using Claude Sonnet 4.5 through OmniRoute gateway.
 - **Channel integration** - works through discussion groups
 - **Tor support** - SOCKS5 proxy with automatic fallback
 - **Docker-ready** - containerized deployment
-- **Tested** - 51 automated tests on startup
+- **Tested** - 68 automated tests on startup
 
 ## 🚀 Quick Start
 
@@ -162,13 +162,16 @@ Tests run automatically on Docker startup. If tests fail, the bot won't start.
 ```
 claude_bot/
 ├── main.py              # Bot entry point with middleware
-├── handlers.py          # Message handlers and commands
-├── claude_client.py     # OmniRoute API client
+├── handlers.py          # General message handler (non-command)
+├── commands.py          # All command handlers (/start, /clear, etc.)
+├── permissions.py       # User permission checks
+├── mentions.py          # Bot mention detection
+├── claude_client.py     # OmniRoute API client + conversation management
 ├── entrypoint.sh        # Docker entrypoint with test runner
 ├── requirements.txt     # Python dependencies
 ├── Dockerfile           # Docker image definition
 ├── docker-compose.yml   # Docker Compose configuration
-├── test_*.py            # Test files (51 tests)
+├── test_*.py            # Test files (68 tests)
 ├── .env.example         # Environment template
 └── conversations/       # Saved conversations (persistent)
 ```
@@ -177,11 +180,12 @@ claude_bot/
 
 The bot includes comprehensive test coverage:
 
-- **11 tests** for Claude client (API, conversation management)
-- **13 tests** for handlers (commands, mentions, permissions)
+- **14 tests** for Claude client (API, conversation, channel & user management)
+- **22 tests** for handlers (mentions, permissions, message handling, commands)
+- **8 tests** for middleware (log_updates, inject_claude)
 - **7 tests** for main (proxy, initialization, error handling)
 
-All tests run automatically on container startup using pytest.
+All 68 tests run automatically on container startup using pytest. If tests fail, the bot won't start.
 
 ## 🌐 OmniRoute
 
@@ -251,5 +255,3 @@ Pull requests are welcome! For major changes, please open an issue first.
 - [aiogram](https://github.com/aiogram/aiogram) - Telegram Bot framework
 - [OmniRoute](https://github.com/diegosouzapw/OmniRoute) - AI gateway
 - [Anthropic Claude](https://www.anthropic.com/) - AI model
-
-## 📄 License
