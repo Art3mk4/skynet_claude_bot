@@ -30,6 +30,7 @@ async def cmd_start(message: Message):
         "/user_add <id> - Добавить пользователя\n"
         "/user_del <id> - Удалить пользователя\n"
         "/add_channel <id> - Добавить канал\n"
+        "/remove_channel <id> - Удалить канал\n"
         "/help - Помощь"
     )
 
