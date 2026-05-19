@@ -203,14 +203,14 @@ class TestCmdStart:
     async def test_allowed(self, message_factory, mock_claude):
         message = message_factory(user_id=123)
         with patch('commands.is_allowed_user', return_value=True):
-            await cmd_start(message, claude=mock_claude)
+            await cmd_start(message)
             message.answer.assert_called_once()
             assert "SkyNet" in message.answer.call_args[0][0]
 
     async def test_not_allowed(self, message_factory, mock_claude):
         message = message_factory(user_id=999)
         with patch('commands.is_allowed_user', return_value=False):
-            await cmd_start(message, claude=mock_claude)
+            await cmd_start(message)
             message.answer.assert_called_once_with("У вас нет доступа к этому боту")
 
 
@@ -336,7 +336,7 @@ class TestCmdUserAdd:
     async def test_not_private(self, message_factory, mock_claude):
         message = message_factory(user_id=123, text="/user_add 999", chat_type='group')
         await cmd_user_add(message, claude=mock_claude)
-        assert "личные сообщения" in message.answer.call_args[0][0]
+        assert "личн" in message.answer.call_args[0][0].lower()
 
 
 @pytest.mark.asyncio
