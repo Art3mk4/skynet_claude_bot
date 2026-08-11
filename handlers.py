@@ -42,7 +42,7 @@ async def handle_message(message: Message, claude: ClaudeClient = None):
         await message.answer("Да? Чем могу помочь?")
         return
 
-    await message.chat.send_action("typing")
+    await message.bot.send_chat_action(chat_id=message.chat.id, action="typing")
 
     try:
         chat_id = message.chat.id

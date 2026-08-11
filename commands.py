@@ -5,7 +5,7 @@ from aiogram import Router
 from aiogram.types import Message
 from aiogram.filters import Command, CommandStart
 
-from permissions import is_allowed_user
+from permissions import is_allowed_user, AllowedUserFilter
 from claude_client import ClaudeClient
 
 logger = logging.getLogger(__name__)
@@ -15,6 +15,7 @@ router = Router()
 @router.message(CommandStart())
 async def cmd_start(message: Message):
     logger.info(f"/start command from user {message.from_user.id}")
+
     if not is_allowed_user(message.from_user.id):
         logger.warning(f"User {message.from_user.id} not allowed to use /start")
         await message.answer("У вас нет доступа к этому боту")
@@ -38,24 +39,18 @@ async def cmd_start(message: Message):
     )
 
 
-@router.message(Command('clear'))
+@router.message(Command('clear'), AllowedUserFilter())
 async def cmd_clear(message: Message, claude: ClaudeClient):
     logger.info(f"/clear command from user {message.from_user.id}, chat={message.chat.id}")
-    if not is_allowed_user(message.from_user.id):
-        logger.warning(f"User {message.from_user.id} not allowed to use /clear")
-        return
 
     chat_id = message.chat.id
     claude.clear_history(chat_id)
     await message.answer("История диалога очищена")
 
 
-@router.message(Command('help'))
+@router.message(Command('help'), AllowedUserFilter())
 async def cmd_help(message: Message, claude: ClaudeClient):
     logger.info(f"/help command from user {message.from_user.id}")
-    if not is_allowed_user(message.from_user.id):
-        logger.warning(f"User {message.from_user.id} not allowed to use /help")
-        return
 
     await message.answer(
         "Я SkyNet, AI ассистент на базе Claude.\n\n"
@@ -76,12 +71,9 @@ async def cmd_help(message: Message, claude: ClaudeClient):
     )
 
 
-@router.message(Command('chats'))
+@router.message(Command('chats'), AllowedUserFilter())
 async def cmd_chats(message: Message, claude: ClaudeClient):
     logger.info(f"/chats command from user {message.from_user.id}")
-    if not is_allowed_user(message.from_user.id):
-        logger.warning(f"User {message.from_user.id} not allowed to use /chats")
-        return
 
     active_chats = claude.get_active_chats()
 
@@ -91,25 +83,25 @@ async def cmd_chats(message: Message, claude: ClaudeClient):
 
     response = "Список активных чатов:\n\n"
     for chat_id, msg_count in active_chats.items():
-        if chat_id > 0:
+        # Определение типа чата по ID
+        if chat_id == 0:
+            chat_type = "Неизвестный тип"
+        elif chat_id > 0:
             chat_type = "Личный чат"
         elif chat_id < -1000000000000:
             chat_type = "Канал"
         else:
             chat_type = "Группа"
-        response += f"• Chat ID: `{chat_id}` ({chat_type})\n  Сообщений в истории: {msg_count}\n\n"
+        response += f"• Chat ID: <code>{chat_id}</code> ({chat_type})\n  Сообщений в истории: {msg_count}\n\n"
 
     response += "Используй /channels для просмотра мониторируемых каналов."
 
-    await message.answer(response)
+    await message.answer(response, parse_mode="HTML")
 
 
-@router.message(Command('channels'))
+@router.message(Command('channels'), AllowedUserFilter())
 async def cmd_channels_info(message: Message, claude: ClaudeClient):
     logger.info(f"/channels command from user {message.from_user.id}")
-    if not is_allowed_user(message.from_user.id):
-        logger.warning(f"User {message.from_user.id} not allowed to use /channels")
-        return
 
     monitored_channels = claude.get_monitored_channels()
     active_chats = claude.get_active_chats()
@@ -117,16 +109,16 @@ async def cmd_channels_info(message: Message, claude: ClaudeClient):
     bot_info = await message.bot.me()
     bot_id = bot_info.id
 
-    response = "Мониторируемые каналы:\n\n"
-
     if not monitored_channels and not active_chats:
         await message.answer(
             "Нет активных чатов и мониторируемых каналов.\n\n"
             "Для добавления канала используй:\n"
-            "/add_channel <channel_id>",
-            parse_mode=None
+            "/add_channel &lt;channel_id&gt;",
+            parse_mode="HTML"
         )
         return
+
+    response = "Мониторируемые каналы:\n\n"
 
     if monitored_channels:
         response += "Добавленные вручную:\n"
@@ -134,10 +126,10 @@ async def cmd_channels_info(message: Message, claude: ClaudeClient):
             try:
                 chat = await message.bot.get_chat(chat_id)
                 title = chat.title or "Без названия"
-                response += f"- {title}\n  ID: {chat_id}\n  Тип: {chat.type}\n\n"
+                response += f"- {title}\n  ID: <code>{chat_id}</code>\n  Тип: {chat.type}\n\n"
             except Exception as e:
                 logger.warning(f"Cannot get chat info for {chat_id}: {e}")
-                response += f"- Unknown channel\n  ID: {chat_id}\n  (не удалось получить данные)\n\n"
+                response += f"- Unknown channel\n  ID: <code>{chat_id}</code>\n  (не удалось получить данные)\n\n"
     else:
         response += "Нет каналов, добавленных вручную.\n\n"
 
@@ -158,20 +150,17 @@ async def cmd_channels_info(message: Message, claude: ClaudeClient):
     if admin_channels:
         response += "\nГде я администратор:\n"
         for chat_id, title, chat_type in admin_channels:
-            response += f"- {title}\n  ID: {chat_id}\n  Тип: {chat_type}\n\n"
+            response += f"- {title}\n  ID: <code>{chat_id}</code>\n  Тип: {chat_type}\n\n"
 
     if len(admin_channels) == 0 and not monitored_channels:
         response += "Каналов не найдено.\n\n"
 
-    await message.answer(response, parse_mode=None)
+    await message.answer(response, parse_mode="HTML")
 
 
-@router.message(Command('add_channel'))
+@router.message(Command('add_channel'), AllowedUserFilter())
 async def cmd_add_channel(message: Message, claude: ClaudeClient):
     logger.info(f"/add_channel command from user {message.from_user.id}")
-    if not is_allowed_user(message.from_user.id):
-        logger.warning(f"User {message.from_user.id} not allowed to use /add_channel")
-        return
 
     args = message.text.split()
     if len(args) < 2:
@@ -200,12 +189,9 @@ async def cmd_add_channel(message: Message, claude: ClaudeClient):
         await message.answer(f"[WARN] Канал {chat_id} уже в списке мониторинга", parse_mode=None)
 
 
-@router.message(Command('remove_channel'))
+@router.message(Command('remove_channel'), AllowedUserFilter())
 async def cmd_remove_channel(message: Message, claude: ClaudeClient):
     logger.info(f"/remove_channel command from user {message.from_user.id}")
-    if not is_allowed_user(message.from_user.id):
-        logger.warning(f"User {message.from_user.id} not allowed to use /remove_channel")
-        return
 
     args = message.text.split()
     if len(args) < 2:

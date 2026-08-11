@@ -51,12 +51,12 @@ def message_factory(mock_claude):
         msg.chat.type = chat_type
         msg.text = text
         msg.answer = AsyncMock()
-        msg.chat.send_action = AsyncMock()
 
         bot_info = Mock()
         bot_info.username = "testbot"
         msg.bot = Mock()
         msg.bot.me = AsyncMock(return_value=bot_info)
+        msg.bot.send_chat_action = AsyncMock()
         return msg
     return _make
 
@@ -229,31 +229,38 @@ class TestCmdStart:
 class TestCmdClear:
     async def test_clear(self, message_factory, mock_claude):
         message = message_factory(user_id=123, chat_id=456)
-        with patch('commands.is_allowed_user', return_value=True):
+        # Фильтры пропускают разрешённых пользователей
+        with patch('permissions.is_allowed_user', return_value=True):
             await cmd_clear(message, claude=mock_claude)
             mock_claude.clear_history.assert_called_once_with(456)
             message.answer.assert_called_once_with("История диалога очищена")
 
     async def test_not_allowed(self, message_factory, mock_claude):
+        # Тест фильтра - он не пропускает неразрешённых пользователей
         message = message_factory(user_id=999)
-        with patch('commands.is_allowed_user', return_value=False):
-            await cmd_clear(message, claude=mock_claude)
-            message.answer.assert_not_called()
+        from permissions import AllowedUserFilter
+        filter_instance = AllowedUserFilter()
+        with patch('permissions.is_allowed_user', return_value=False):
+            result = await filter_instance(message)
+            assert result is False
 
 
 @pytest.mark.asyncio
 class TestCmdHelp:
     async def test_help(self, message_factory, mock_claude):
         message = message_factory(user_id=123)
-        with patch('commands.is_allowed_user', return_value=True):
+        with patch('permissions.is_allowed_user', return_value=True):
             await cmd_help(message, claude=mock_claude)
             message.answer.assert_called_once()
 
     async def test_not_allowed(self, message_factory, mock_claude):
+        # Тест фильтра
         message = message_factory(user_id=999)
-        with patch('commands.is_allowed_user', return_value=False):
-            await cmd_help(message, claude=mock_claude)
-            message.answer.assert_not_called()
+        from permissions import AllowedUserFilter
+        filter_instance = AllowedUserFilter()
+        with patch('permissions.is_allowed_user', return_value=False):
+            result = await filter_instance(message)
+            assert result is False
 
 
 @pytest.mark.asyncio
@@ -284,10 +291,13 @@ class TestCmdChannelsInfo:
             assert message.answer.call_count >= 1
 
     async def test_not_allowed(self, message_factory, mock_claude):
+        # Тестируем AllowedUserFilter - он возвращает False для неразрешённых пользователей
         message = message_factory(user_id=999)
-        with patch('commands.is_allowed_user', return_value=False):
-            await cmd_channels_info(message, claude=mock_claude)
-            message.answer.assert_not_called()
+        from permissions import AllowedUserFilter
+        filter_instance = AllowedUserFilter()
+        with patch('permissions.is_allowed_user', return_value=False):
+            result = await filter_instance(message)
+            assert result is False
 
 
 @pytest.mark.asyncio
@@ -316,10 +326,13 @@ class TestCmdAddChannel:
             assert message.answer.call_count >= 1
 
     async def test_not_allowed(self, message_factory, mock_claude):
+        # Тестируем AllowedUserFilter - он возвращает False для неразрешённых пользователей
         message = message_factory(user_id=999, text="/add_channel -1001234567890")
-        with patch('commands.is_allowed_user', return_value=False):
-            await cmd_add_channel(message, claude=mock_claude)
-            message.answer.assert_not_called()
+        from permissions import AllowedUserFilter
+        filter_instance = AllowedUserFilter()
+        with patch('permissions.is_allowed_user', return_value=False):
+            result = await filter_instance(message)
+            assert result is False
 
 
 @pytest.mark.asyncio
@@ -438,7 +451,7 @@ class TestHandleMessageErrors:
         with patch('handlers.is_allowed_user', return_value=True), \
              patch.object(mock_claude, 'get_response', return_value="ok"):
             await handle_message(message, claude=mock_claude)
-            message.chat.send_action.assert_called_once_with("typing")
+            message.bot.send_chat_action.assert_called_once_with(chat_id=456, action="typing")
 
 
 # --- additional command error paths ---

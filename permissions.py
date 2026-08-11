@@ -1,6 +1,9 @@
 import logging
 import os
 
+from aiogram.filters import Filter
+from aiogram.types import Message
+
 from claude_client import ClaudeClient
 
 logger = logging.getLogger(__name__)
@@ -20,3 +23,10 @@ def is_allowed_user(user_id: int) -> bool:
 
     logger.info(f"is_allowed_user({user_id}): not allowed")
     return False
+
+
+class AllowedUserFilter(Filter):
+    """Filter для проверки разрешённых пользователей на уровне роутера"""
+
+    async def __call__(self, message: Message) -> bool:
+        return is_allowed_user(message.from_user.id)
