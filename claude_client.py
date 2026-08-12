@@ -13,8 +13,8 @@ logger = logging.getLogger(__name__)
 class ClaudeClient:
     def __init__(self):
         api_key = os.getenv('OMNIROUTE_API_KEY')
-        if not api_key:
-            raise ValueError("OMNIROUTE_API_KEY not found in environment")
+        if not api_key or api_key.startswith('your_'):
+            raise ValueError("OMNIROUTE_API_KEY not configured (set a valid API key in .env)")
         base_url = os.getenv('OMNIROUTE_BASE_URL', 'http://localhost:20128/v1')
         self.model = os.getenv('OMNIROUTE_MODEL', 'kr/claude-sonnet-4.5')
 
@@ -34,6 +34,8 @@ class ClaudeClient:
 
         # Async locks для защиты от race conditions при записи
         self._conversation_locks: Dict[int, asyncio.Lock] = {}
+        self._lock_access_order: List[int] = []  # Track LRU for lock cleanup
+        self._max_locks = 100  # Limit to prevent unbounded memory growth
         self._channels_lock = asyncio.Lock()
         self._users_lock = asyncio.Lock()
 
@@ -64,6 +66,24 @@ class ClaudeClient:
         """Сохраняет диалог на диск с защитой от race conditions"""
         if chat_id not in self._conversation_locks:
             self._conversation_locks[chat_id] = asyncio.Lock()
+            self._lock_access_order.append(chat_id)
+
+            # Cleanup old locks if limit exceeded
+            if len(self._conversation_locks) > self._max_locks:
+                # Remove oldest lock that's not currently in use
+                for old_chat_id in self._lock_access_order[:]:
+                    if old_chat_id in self._conversation_locks:
+                        lock = self._conversation_locks[old_chat_id]
+                        if not lock.locked():
+                            del self._conversation_locks[old_chat_id]
+                            self._lock_access_order.remove(old_chat_id)
+                            logger.debug(f"Cleaned up unused lock for chat {old_chat_id}")
+                            break
+        else:
+            # Update access order for LRU
+            if chat_id in self._lock_access_order:
+                self._lock_access_order.remove(chat_id)
+            self._lock_access_order.append(chat_id)
 
         async with self._conversation_locks[chat_id]:
             try:
@@ -179,10 +199,20 @@ class ClaudeClient:
         """Удаляет пользователя из списка разрешенных"""
         if user_id not in self.allowed_users:
             return False
+
+        # Save before deletion to maintain consistency if save fails
+        old_username = self.allowed_users[user_id]
         del self.allowed_users[user_id]
-        await self._save_allowed_users()
-        logger.info(f"Removed user {user_id} from allowed users")
-        return True
+
+        try:
+            await self._save_allowed_users()
+            logger.info(f"Removed user {user_id} from allowed users")
+            return True
+        except Exception as e:
+            # Rollback on save failure
+            self.allowed_users[user_id] = old_username
+            logger.error(f"Failed to save after removing user {user_id}, rolled back: {e}")
+            raise
 
     def is_user_allowed(self, user_id: int) -> bool:
         """Проверяет, разрешен ли пользователь (из users.json)"""

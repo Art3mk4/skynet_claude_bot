@@ -51,7 +51,16 @@ class TestClaudeClientInit:
         """Test that ClaudeClient raises ValueError when OMNIROUTE_API_KEY is missing"""
         with patch.dict('os.environ', {}, clear=True), \
              patch.object(Path, 'mkdir'):
-            with pytest.raises(ValueError, match="OMNIROUTE_API_KEY not found"):
+            with pytest.raises(ValueError, match="OMNIROUTE_API_KEY not configured"):
+                ClaudeClient()
+
+    def test_init_with_dummy_api_key(self):
+        """Test that ClaudeClient raises ValueError when OMNIROUTE_API_KEY is dummy value"""
+        with patch.dict('os.environ', {
+            'OMNIROUTE_API_KEY': 'your_omniroute_api_key',
+            'TEST_MODE': '1'
+        }), patch.object(Path, 'mkdir'):
+            with pytest.raises(ValueError, match="OMNIROUTE_API_KEY not configured"):
                 ClaudeClient()
 
 
