@@ -4,7 +4,7 @@
 
 ![Python](https://img.shields.io/badge/python-3.12+-blue.svg)
 ![License](https://img.shields.io/badge/license-MIT-green.svg)
-![Tests](https://img.shields.io/badge/tests-68-passing-brightgreen.svg)
+![Tests](https://img.shields.io/badge/tests-85+-passing-brightgreen.svg)
 
 AI-powered Telegram bot using Claude Sonnet 4.5 through OmniRoute gateway.
 
@@ -19,7 +19,7 @@ AI-powered Telegram bot using Claude Sonnet 4.5 through OmniRoute gateway.
 - **Channel integration** - works through discussion groups
 - **Tor support** - SOCKS5 proxy with automatic fallback
 - **Docker-ready** - containerized deployment
-- **Tested** - 68 automated tests on startup
+- **Tested** - 85+ automated tests on startup
 
 ## 🚀 Quick Start
 
@@ -180,12 +180,12 @@ claude_bot/
 
 The bot includes comprehensive test coverage:
 
-- **14 tests** for Claude client (API, conversation, channel & user management)
-- **22 tests** for handlers (mentions, permissions, message handling, commands)
-- **8 tests** for middleware (log_updates, inject_claude)
-- **7 tests** for main (proxy, initialization, error handling)
+- **14+ tests** for Claude client (API, conversation, channel & user management)
+- **22+ tests** for handlers (mentions, permissions, message handling, commands)
+- **8+ tests** for middleware (log_updates, inject_claude)
+- **7+ tests** for main (proxy, initialization, error handling)
 
-All 68 tests run automatically on container startup using pytest. If tests fail, the bot won't start.
+All 85+ tests run automatically on container startup using pytest. If tests fail, the bot won't start.
 
 ## 🌐 OmniRoute
 

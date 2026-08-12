@@ -78,8 +78,8 @@ To use the bot in a channel:
 
 ## Testing
 
-- **31 automated tests** run on every container startup
-- Tests cover: Claude client (11), Handlers (13), Main (7)
+- **85 automated tests** run on every container startup
+- Tests cover: Claude client (14), Handlers (22), Middleware (8), Main (7), plus additional edge cases
 - If tests fail, bot won't start
 - Run locally: `pytest -v`
 

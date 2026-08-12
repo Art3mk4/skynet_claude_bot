@@ -55,7 +55,7 @@ async def cmd_help(message: Message, claude: ClaudeClient):
     await message.answer(
         "Я SkyNet, AI ассистент на базе Claude.\n\n"
         "Упомяни меня в сообщении:\n"
-        "• @bot\\_username что такое Python?\n"
+        "• @bot_username что такое Python?\n"
         "• skynet, помоги с кодом\n\n"
         "Работаю в личных чатах, группах, каналах и комментариях.\n"
         "Я запоминаю контекст разговора в рамках чата.\n\n"
@@ -63,11 +63,11 @@ async def cmd_help(message: Message, claude: ClaudeClient):
         "/clear - Очистить историю\n"
         "/chats - Список активных чатов\n"
         "/channels - Мониторируемые каналы\n"
-        "/users - Список разрешённых пользователей\n"
-        "/user\\_add <id> - Добавить пользователя\n"
-        "/user\\_del <id> - Удалить пользователя\n"
+        "/user_list - Список разрешённых пользователей\n"
+        "/user_add &lt;id&gt; - Добавить пользователя\n"
+        "/user_del &lt;id&gt; - Удалить пользователя\n"
         "/help - Эта справка",
-        parse_mode="MarkdownV2"
+        parse_mode="HTML"
     )
 
 
@@ -83,15 +83,26 @@ async def cmd_chats(message: Message, claude: ClaudeClient):
 
     response = "Список активных чатов:\n\n"
     for chat_id, msg_count in active_chats.items():
-        # Определение типа чата по ID
-        if chat_id == 0:
-            chat_type = "Неизвестный тип"
-        elif chat_id > 0:
-            chat_type = "Личный чат"
-        elif chat_id < -1000000000000:
-            chat_type = "Канал"
-        else:
-            chat_type = "Группа"
+        # Определение типа чата через API (надежнее, чем по диапазону ID)
+        try:
+            chat = await message.bot.get_chat(chat_id)
+            chat_type_map = {
+                'private': 'Личный чат',
+                'group': 'Группа',
+                'supergroup': 'Супергруппа',
+                'channel': 'Канал'
+            }
+            chat_type = chat_type_map.get(chat.type, f"Неизвестный ({chat.type})")
+        except Exception as e:
+            logger.warning(f"Cannot get chat type for {chat_id}: {e}")
+            # Fallback к определению по ID только если API недоступен
+            if chat_id == 0:
+                chat_type = "Неизвестный тип"
+            elif chat_id > 0:
+                chat_type = "Личный чат"
+            else:
+                chat_type = "Группа/Канал"
+
         response += f"• Chat ID: <code>{chat_id}</code> ({chat_type})\n  Сообщений в истории: {msg_count}\n\n"
 
     response += "Используй /channels для просмотра мониторируемых каналов."
@@ -155,7 +166,24 @@ async def cmd_channels_info(message: Message, claude: ClaudeClient):
     if len(admin_channels) == 0 and not monitored_channels:
         response += "Каналов не найдено.\n\n"
 
-    await message.answer(response, parse_mode="HTML")
+    # Split message if it exceeds Telegram's limit (4096 characters)
+    MAX_LENGTH = 4000  # Leave some margin
+    if len(response) > MAX_LENGTH:
+        parts = []
+        current_part = ""
+        for line in response.split('\n'):
+            if len(current_part) + len(line) + 1 > MAX_LENGTH:
+                parts.append(current_part)
+                current_part = line + '\n'
+            else:
+                current_part += line + '\n'
+        if current_part:
+            parts.append(current_part)
+
+        for part in parts:
+            await message.answer(part, parse_mode="HTML")
+    else:
+        await message.answer(response, parse_mode="HTML")
 
 
 @router.message(Command('add_channel'), AllowedUserFilter())
@@ -176,17 +204,17 @@ async def cmd_add_channel(message: Message, claude: ClaudeClient):
         await message.answer("Ошибка: ID канала должен быть числом")
         return
 
-    if claude.add_channel(chat_id):
-        await message.answer(f"[OK] Канал {chat_id} добавлен в список мониторинга!", parse_mode=None)
+    if await claude.add_channel(chat_id):
+        await message.answer(f"[OK] Канал {chat_id} добавлен в список мониторинга!")
 
         try:
             chat = await message.bot.get_chat(chat_id)
             title = chat.title or "Без названия"
-            await message.answer(f"Название: {title}\nТип: {chat.type}", parse_mode=None)
+            await message.answer(f"Название: {title}\nТип: {chat.type}")
         except Exception as e:
             logger.warning(f"Cannot get chat info for {chat_id}: {e}")
     else:
-        await message.answer(f"[WARN] Канал {chat_id} уже в списке мониторинга", parse_mode=None)
+        await message.answer(f"[WARN] Канал {chat_id} уже в списке мониторинга")
 
 
 @router.message(Command('remove_channel'), AllowedUserFilter())
@@ -207,10 +235,10 @@ async def cmd_remove_channel(message: Message, claude: ClaudeClient):
         await message.answer("Ошибка: ID канала должен быть числом")
         return
 
-    if claude.remove_channel(chat_id):
-        await message.answer(f"[OK] Канал {chat_id} удалён из списка мониторинга!", parse_mode=None)
+    if await claude.remove_channel(chat_id):
+        await message.answer(f"[OK] Канал {chat_id} удалён из списка мониторинга!")
     else:
-        await message.answer(f"[WARN] Канал {chat_id} не найден в списке мониторинга", parse_mode=None)
+        await message.answer(f"[WARN] Канал {chat_id} не найден в списке мониторинга")
 
 
 @router.message(Command('user_add'))
@@ -218,12 +246,12 @@ async def cmd_user_add(message: Message, claude: ClaudeClient):
     logger.info(f"/user_add command from user {message.from_user.id}, text: {message.text}")
 
     if message.chat.type != 'private':
-        await message.answer("Эта команда доступна только в личных сообщениях", parse_mode=None)
+        await message.answer("Эта команда доступна только в личных сообщениях")
         return
 
     if not is_allowed_user(message.from_user.id):
         logger.warning(f"User {message.from_user.id} is not allowed to use /user_add")
-        await message.answer("У вас нет доступа к этой команде", parse_mode=None)
+        await message.answer("У вас нет доступа к этой команде")
         return
 
     args = message.text.split()
@@ -251,23 +279,23 @@ async def cmd_user_add(message: Message, claude: ClaudeClient):
         logger.warning(f"Could not fetch username for user {user_id}: {e}")
         username = ""
 
-    result = claude.add_user(user_id, username)
+    result = await claude.add_user(user_id, username)
     logger.info(f"add_user({user_id}) returned: {result}")
 
     if result:
-        await message.answer(f"[OK] Пользователь {user_id} добавлен в список разрешённых!", parse_mode=None)
+        await message.answer(f"[OK] Пользователь {user_id} добавлен в список разрешённых!")
     else:
-        await message.answer(f"[WARN] Пользователь {user_id} уже в списке разрешённых", parse_mode=None)
+        await message.answer(f"[WARN] Пользователь {user_id} уже в списке разрешённых")
 
 
 @router.message(Command('user_del'))
 async def cmd_user_del(message: Message, claude: ClaudeClient):
     if message.chat.type != 'private':
-        await message.answer("Эта команда доступна только в личных сообщениях", parse_mode=None)
+        await message.answer("Эта команда доступна только в личных сообщениях")
         return
 
     if not is_allowed_user(message.from_user.id):
-        await message.answer("У вас нет доступа к этой команде", parse_mode=None)
+        await message.answer("У вас нет доступа к этой команде")
         return
 
     args = message.text.split()
@@ -284,26 +312,26 @@ async def cmd_user_del(message: Message, claude: ClaudeClient):
         logger.info(f"Parsed user_id: {user_id}")
     except ValueError as e:
         logger.error(f"Failed to parse user_id from '{args[1]}': {e}")
-        await message.answer("Ошибка: ID пользователя должен быть числом", parse_mode=None)
+        await message.answer("Ошибка: ID пользователя должен быть числом")
         return
 
-    result = claude.remove_user(user_id)
+    result = await claude.remove_user(user_id)
     logger.info(f"remove_user({user_id}) returned: {result}")
 
     if result:
-        await message.answer(f"[OK] Пользователь {user_id} удалён из списка разрешённых!", parse_mode=None)
+        await message.answer(f"[OK] Пользователь {user_id} удалён из списка разрешённых!")
     else:
-        await message.answer(f"[WARN] Пользователь {user_id} не найден в списке разрешённых", parse_mode=None)
+        await message.answer(f"[WARN] Пользователь {user_id} не найден в списке разрешённых")
 
 
 @router.message(Command('user_list'))
 async def cmd_users_list(message: Message, claude: ClaudeClient):
     if message.chat.type != 'private':
-        await message.answer("Эта команда доступна только в личных сообщениях", parse_mode=None)
+        await message.answer("Эта команда доступна только в личных сообщениях")
         return
 
     if not is_allowed_user(message.from_user.id):
-        await message.answer("У вас нет доступа к этой команде", parse_mode=None)
+        await message.answer("У вас нет доступа к этой команде")
         return
 
     allowed = claude.get_allowed_users()
@@ -329,4 +357,4 @@ async def cmd_users_list(message: Message, claude: ClaudeClient):
             else:
                 response += f"- {uid}\n"
 
-    await message.answer(response, parse_mode=None)
+    await message.answer(response)

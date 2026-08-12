@@ -23,12 +23,12 @@ def mock_claude():
     client = Mock()
     client.get_response = AsyncMock(return_value="Привет!")
     client.clear_history = Mock()
-    client.add_channel = Mock(return_value=True)
-    client.remove_channel = Mock(return_value=True)
+    client.add_channel = AsyncMock(return_value=True)
+    client.remove_channel = AsyncMock(return_value=True)
     client.get_active_chats = Mock(return_value={})
     client.get_monitored_channels = Mock(return_value=set())
-    client.add_user = Mock(return_value=True)
-    client.remove_user = Mock(return_value=True)
+    client.add_user = AsyncMock(return_value=True)
+    client.remove_user = AsyncMock(return_value=True)
     client.get_allowed_users = Mock(return_value={})
     return client
 

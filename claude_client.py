@@ -1,6 +1,7 @@
 import os
 import json
 import logging
+import asyncio
 from pathlib import Path
 from typing import Dict, List, Set, Tuple
 from openai import AsyncOpenAI
@@ -30,6 +31,11 @@ class ClaudeClient:
         self.users_file = self.conversations_dir / "users.json"
         self.conversations_dir.mkdir(exist_ok=True)
 
+        # Async locks для защиты от race conditions при записи
+        self._conversation_locks: Dict[int, asyncio.Lock] = {}
+        self._channels_lock = asyncio.Lock()
+        self._users_lock = asyncio.Lock()
+
         # Clear users.json in test mode (pytest runs)
         if os.getenv('TEST_MODE') == '1' and self.users_file.exists():
             self.users_file.unlink()
@@ -53,14 +59,18 @@ class ClaudeClient:
             except Exception as e:
                 logger.error(f"Error loading conversation from {file}: {e}")
 
-    def _save_conversation(self, chat_id: int):
-        """Сохраняет диалог на диск"""
-        try:
-            file = self._get_conversation_file(chat_id)
-            with open(file, 'w', encoding='utf-8') as f:
-                json.dump(self.conversations[chat_id], f, ensure_ascii=False, indent=2)
-        except Exception as e:
-            logger.error(f"Error saving conversation for chat {chat_id}: {e}")
+    async def _save_conversation(self, chat_id: int):
+        """Сохраняет диалог на диск с защитой от race conditions"""
+        if chat_id not in self._conversation_locks:
+            self._conversation_locks[chat_id] = asyncio.Lock()
+
+        async with self._conversation_locks[chat_id]:
+            try:
+                file = self._get_conversation_file(chat_id)
+                with open(file, 'w', encoding='utf-8') as f:
+                    json.dump(self.conversations[chat_id], f, ensure_ascii=False, indent=2)
+            except Exception as e:
+                logger.error(f"Error saving conversation for chat {chat_id}: {e}")
 
     def clear_history(self, chat_id: int):
         """Очищает историю диалога"""
@@ -84,29 +94,30 @@ class ClaudeClient:
             except Exception as e:
                 logger.error(f"Error loading channels file: {e}")
 
-    def _save_monitored_channels(self):
-        """Сохраняет список мониторируемых каналов"""
-        try:
-            with open(self.channels_file, 'w', encoding='utf-8') as f:
-                json.dump({'channels': list(self.monitored_channels)}, f, ensure_ascii=False, indent=2)
-        except Exception as e:
-            logger.error(f"Error saving channels file: {e}")
+    async def _save_monitored_channels(self):
+        """Сохраняет список мониторируемых каналов с защитой от race conditions"""
+        async with self._channels_lock:
+            try:
+                with open(self.channels_file, 'w', encoding='utf-8') as f:
+                    json.dump({'channels': list(self.monitored_channels)}, f, ensure_ascii=False, indent=2)
+            except Exception as e:
+                logger.error(f"Error saving channels file: {e}")
 
-    def add_channel(self, chat_id: int) -> bool:
+    async def add_channel(self, chat_id: int) -> bool:
         """Добавляет канал в список мониторинга"""
         if chat_id in self.monitored_channels:
             return False
         self.monitored_channels.add(chat_id)
-        self._save_monitored_channels()
+        await self._save_monitored_channels()
         logger.info(f"Added channel {chat_id} to monitored channels")
         return True
 
-    def remove_channel(self, chat_id: int) -> bool:
+    async def remove_channel(self, chat_id: int) -> bool:
         """Удаляет канал из списка мониторинга"""
         if chat_id not in self.monitored_channels:
             return False
         self.monitored_channels.discard(chat_id)
-        self._save_monitored_channels()
+        await self._save_monitored_channels()
         logger.info(f"Removed channel {chat_id} from monitored channels")
         return True
 
@@ -132,31 +143,32 @@ class ClaudeClient:
             except Exception as e:
                 logger.error(f"Error loading users file: {e}")
 
-    def _save_allowed_users(self):
-        """Сохраняет список разрешенных пользователей"""
-        try:
-            with open(self.users_file, 'w', encoding='utf-8') as f:
-                # Convert dict to list of dicts
-                users_list = [{"id": uid, "username": uname} for uid, uname in self.allowed_users.items()]
-                json.dump({'users': users_list}, f, ensure_ascii=False, indent=2)
-        except Exception as e:
-            logger.error(f"Error saving users file: {e}")
+    async def _save_allowed_users(self):
+        """Сохраняет список разрешенных пользователей с защитой от race conditions"""
+        async with self._users_lock:
+            try:
+                with open(self.users_file, 'w', encoding='utf-8') as f:
+                    # Convert dict to list of dicts
+                    users_list = [{"id": uid, "username": uname} for uid, uname in self.allowed_users.items()]
+                    json.dump({'users': users_list}, f, ensure_ascii=False, indent=2)
+            except Exception as e:
+                logger.error(f"Error saving users file: {e}")
 
-    def add_user(self, user_id: int, username: str = "") -> bool:
+    async def add_user(self, user_id: int, username: str = "") -> bool:
         """Добавляет пользователя в список разрешенных"""
         if user_id in self.allowed_users:
             return False
         self.allowed_users[user_id] = username
-        self._save_allowed_users()
+        await self._save_allowed_users()
         logger.info(f"Added user {user_id} ({username}) to allowed users")
         return True
 
-    def remove_user(self, user_id: int) -> bool:
+    async def remove_user(self, user_id: int) -> bool:
         """Удаляет пользователя из списка разрешенных"""
         if user_id not in self.allowed_users:
             return False
         del self.allowed_users[user_id]
-        self._save_allowed_users()
+        await self._save_allowed_users()
         logger.info(f"Removed user {user_id} from allowed users")
         return True
 
@@ -223,7 +235,7 @@ class ClaudeClient:
             })
 
             # Сохраняем диалог
-            self._save_conversation(chat_id)
+            await self._save_conversation(chat_id)
 
             return assistant_message
 
