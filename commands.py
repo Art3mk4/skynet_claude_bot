@@ -13,7 +13,7 @@ router = Router()
 
 
 @router.message(CommandStart())
-async def cmd_start(message: Message):
+async def cmd_start(message: Message) -> None:
     logger.info(f"/start command from user {message.from_user.id}")
 
     if not is_allowed_user(message.from_user.id):
@@ -40,7 +40,7 @@ async def cmd_start(message: Message):
 
 
 @router.message(Command('clear'), AllowedUserFilter())
-async def cmd_clear(message: Message, claude: ClaudeClient):
+async def cmd_clear(message: Message, claude: ClaudeClient) -> None:
     logger.info(f"/clear command from user {message.from_user.id}, chat={message.chat.id}")
 
     chat_id = message.chat.id
@@ -49,7 +49,7 @@ async def cmd_clear(message: Message, claude: ClaudeClient):
 
 
 @router.message(Command('help'), AllowedUserFilter())
-async def cmd_help(message: Message, claude: ClaudeClient):
+async def cmd_help(message: Message, claude: ClaudeClient) -> None:
     logger.info(f"/help command from user {message.from_user.id}")
 
     await message.answer(
@@ -72,7 +72,7 @@ async def cmd_help(message: Message, claude: ClaudeClient):
 
 
 @router.message(Command('chats'), AllowedUserFilter())
-async def cmd_chats(message: Message, claude: ClaudeClient):
+async def cmd_chats(message: Message, claude: ClaudeClient) -> None:
     logger.info(f"/chats command from user {message.from_user.id}")
 
     active_chats = claude.get_active_chats()
@@ -111,7 +111,7 @@ async def cmd_chats(message: Message, claude: ClaudeClient):
 
 
 @router.message(Command('channels'), AllowedUserFilter())
-async def cmd_channels_info(message: Message, claude: ClaudeClient):
+async def cmd_channels_info(message: Message, claude: ClaudeClient) -> None:
     logger.info(f"/channels command from user {message.from_user.id}")
 
     monitored_channels = claude.get_monitored_channels()
@@ -187,7 +187,7 @@ async def cmd_channels_info(message: Message, claude: ClaudeClient):
 
 
 @router.message(Command('add_channel'), AllowedUserFilter())
-async def cmd_add_channel(message: Message, claude: ClaudeClient):
+async def cmd_add_channel(message: Message, claude: ClaudeClient) -> None:
     logger.info(f"/add_channel command from user {message.from_user.id}")
 
     args = message.text.split()
@@ -218,7 +218,7 @@ async def cmd_add_channel(message: Message, claude: ClaudeClient):
 
 
 @router.message(Command('remove_channel'), AllowedUserFilter())
-async def cmd_remove_channel(message: Message, claude: ClaudeClient):
+async def cmd_remove_channel(message: Message, claude: ClaudeClient) -> None:
     logger.info(f"/remove_channel command from user {message.from_user.id}")
 
     args = message.text.split()
@@ -242,7 +242,7 @@ async def cmd_remove_channel(message: Message, claude: ClaudeClient):
 
 
 @router.message(Command('user_add'))
-async def cmd_user_add(message: Message, claude: ClaudeClient):
+async def cmd_user_add(message: Message, claude: ClaudeClient) -> None:
     logger.info(f"/user_add command from user {message.from_user.id}, text: {message.text}")
 
     if message.chat.type != 'private':
@@ -289,7 +289,7 @@ async def cmd_user_add(message: Message, claude: ClaudeClient):
 
 
 @router.message(Command('user_del'))
-async def cmd_user_del(message: Message, claude: ClaudeClient):
+async def cmd_user_del(message: Message, claude: ClaudeClient) -> None:
     if message.chat.type != 'private':
         await message.answer("Эта команда доступна только в личных сообщениях")
         return
@@ -325,7 +325,7 @@ async def cmd_user_del(message: Message, claude: ClaudeClient):
 
 
 @router.message(Command('user_list'))
-async def cmd_users_list(message: Message, claude: ClaudeClient):
+async def cmd_users_list(message: Message, claude: ClaudeClient) -> None:
     if message.chat.type != 'private':
         await message.answer("Эта команда доступна только в личных сообщениях")
         return

@@ -5,6 +5,7 @@ import asyncio
 from pathlib import Path
 from typing import Dict, List, Set, Tuple
 from openai import AsyncOpenAI
+import aiofiles
 
 logger = logging.getLogger(__name__)
 
@@ -67,8 +68,8 @@ class ClaudeClient:
         async with self._conversation_locks[chat_id]:
             try:
                 file = self._get_conversation_file(chat_id)
-                with open(file, 'w', encoding='utf-8') as f:
-                    json.dump(self.conversations[chat_id], f, ensure_ascii=False, indent=2)
+                async with aiofiles.open(file, 'w', encoding='utf-8') as f:
+                    await f.write(json.dumps(self.conversations[chat_id], ensure_ascii=False, indent=2))
             except Exception as e:
                 logger.error(f"Error saving conversation for chat {chat_id}: {e}")
 
@@ -80,6 +81,10 @@ class ClaudeClient:
         file = self._get_conversation_file(chat_id)
         if file.exists():
             file.unlink()
+
+        # Cleanup lock to prevent memory leak
+        if chat_id in self._conversation_locks:
+            del self._conversation_locks[chat_id]
 
         logger.info(f"Cleared conversation for chat {chat_id}")
 
@@ -98,8 +103,8 @@ class ClaudeClient:
         """Сохраняет список мониторируемых каналов с защитой от race conditions"""
         async with self._channels_lock:
             try:
-                with open(self.channels_file, 'w', encoding='utf-8') as f:
-                    json.dump({'channels': list(self.monitored_channels)}, f, ensure_ascii=False, indent=2)
+                async with aiofiles.open(self.channels_file, 'w', encoding='utf-8') as f:
+                    await f.write(json.dumps({'channels': list(self.monitored_channels)}, ensure_ascii=False, indent=2))
             except Exception as e:
                 logger.error(f"Error saving channels file: {e}")
 
@@ -147,10 +152,10 @@ class ClaudeClient:
         """Сохраняет список разрешенных пользователей с защитой от race conditions"""
         async with self._users_lock:
             try:
-                with open(self.users_file, 'w', encoding='utf-8') as f:
+                async with aiofiles.open(self.users_file, 'w', encoding='utf-8') as f:
                     # Convert dict to list of dicts
                     users_list = [{"id": uid, "username": uname} for uid, uname in self.allowed_users.items()]
-                    json.dump({'users': users_list}, f, ensure_ascii=False, indent=2)
+                    await f.write(json.dumps({'users': users_list}, ensure_ascii=False, indent=2))
             except Exception as e:
                 logger.error(f"Error saving users file: {e}")
 
@@ -234,8 +239,11 @@ class ClaudeClient:
                 "user_name": "SkyNet"
             })
 
-            # Сохраняем диалог
-            await self._save_conversation(chat_id)
+            # Сохраняем диалог (не критично, если упадёт)
+            try:
+                await self._save_conversation(chat_id)
+            except Exception as save_error:
+                logger.error(f"Failed to save conversation for chat {chat_id}: {save_error}")
 
             return assistant_message
 
