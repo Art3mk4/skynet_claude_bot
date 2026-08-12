@@ -44,7 +44,7 @@ async def cmd_clear(message: Message, claude: ClaudeClient) -> None:
     logger.info(f"/clear command from user {message.from_user.id}, chat={message.chat.id}")
 
     chat_id = message.chat.id
-    claude.clear_history(chat_id)
+    await claude.clear_history(chat_id)
     await message.answer("История диалога очищена")
 
 

@@ -73,10 +73,17 @@ class ClaudeClient:
             except Exception as e:
                 logger.error(f"Error saving conversation for chat {chat_id}: {e}")
 
-    def clear_history(self, chat_id: int):
+    async def clear_history(self, chat_id: int):
         """Очищает историю диалога"""
-        if chat_id in self.conversations:
-            del self.conversations[chat_id]
+        # Wait for any pending writes to complete before clearing
+        if chat_id in self._conversation_locks:
+            async with self._conversation_locks[chat_id]:
+                # Now safe to clear
+                if chat_id in self.conversations:
+                    del self.conversations[chat_id]
+        else:
+            if chat_id in self.conversations:
+                del self.conversations[chat_id]
 
         file = self._get_conversation_file(chat_id)
         if file.exists():

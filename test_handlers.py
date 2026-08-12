@@ -22,7 +22,7 @@ from commands import (
 def mock_claude():
     client = Mock()
     client.get_response = AsyncMock(return_value="Привет!")
-    client.clear_history = Mock()
+    client.clear_history = AsyncMock()
     client.add_channel = AsyncMock(return_value=True)
     client.remove_channel = AsyncMock(return_value=True)
     client.get_active_chats = Mock(return_value={})

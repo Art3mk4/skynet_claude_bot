@@ -95,14 +95,14 @@ class TestConversationManagement:
             assert 456 in client.conversations
             assert client.conversations[456] == test_data
 
-    def test_clear_history(self, claude_client, temp_conversations_dir):
+    async def test_clear_history(self, claude_client, temp_conversations_dir):
         chat_id = 789
         claude_client.conversations[chat_id] = [{"role": "user", "content": "test"}]
 
         file_path = temp_conversations_dir / "chat_789.json"
         file_path.write_text('[]')
 
-        claude_client.clear_history(chat_id)
+        await claude_client.clear_history(chat_id)
 
         assert chat_id not in claude_client.conversations
         assert not file_path.exists()
