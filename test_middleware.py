@@ -1,7 +1,6 @@
 import pytest
 from unittest.mock import AsyncMock, Mock, patch
-from main import log_updates, inject_claude
-from claude_client import ClaudeClient
+from main import log_updates
 
 
 @pytest.mark.asyncio
@@ -22,7 +21,7 @@ class TestLogUpdatesMiddleware:
         event.message = message
 
         with patch('main.logger') as mock_logger:
-            result = await log_updates(handler, event, {})
+            await log_updates(handler, event, {})
             handler.assert_called_once_with(event, {})
             assert mock_logger.info.called
 
@@ -71,7 +70,7 @@ class TestLogUpdatesMiddleware:
         event.event_type = "edited_message"
         event.message = None
 
-        with patch('main.logger') as mock_logger:
+        with patch('main.logger'):
             await log_updates(handler, event, {})
             handler.assert_called_once_with(event, {})
 
@@ -94,26 +93,3 @@ class TestLogUpdatesMiddleware:
         with patch('main.logger', side_effect=Exception("logger error")):
             # Should not crash
             await log_updates(handler, event, {})
-
-
-@pytest.mark.asyncio
-class TestInjectClaudeMiddleware:
-    async def test_injects_claude(self):
-        handler = AsyncMock()
-        event = Mock()
-        data = {}
-
-        result = await inject_claude(handler, event, data)
-        handler.assert_called_once_with(event, data)
-        assert 'claude' in data
-        assert isinstance(data['claude'], ClaudeClient)
-
-    async def test_does_not_override_existing(self):
-        handler = AsyncMock()
-        event = Mock()
-        custom_claude = Mock()
-        data = {'claude': custom_claude}
-
-        result = await inject_claude(handler, event, data)
-        handler.assert_called_once_with(event, data)
-        assert data['claude'] is custom_claude

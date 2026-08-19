@@ -12,7 +12,7 @@ router = Router()
 
 
 @router.message(F.text, lambda msg: not msg.text.startswith('/'))
-async def handle_message(message: Message, claude: ClaudeClient = None):
+async def handle_message(message: Message, claude: ClaudeClient):
     logger.info(
         f"Message received: user={message.from_user.id}, "
         f"chat={message.chat.id}({message.chat.type}), text='{message.text[:80]}'"
@@ -20,7 +20,7 @@ async def handle_message(message: Message, claude: ClaudeClient = None):
 
     is_private = message.chat.type == 'private'
 
-    if is_private and not is_allowed_user(message.from_user.id):
+    if is_private and not is_allowed_user(message.from_user.id, claude):
         logger.info(f"User {message.from_user.id} not allowed, ignoring private chat")
         return
 
@@ -28,7 +28,7 @@ async def handle_message(message: Message, claude: ClaudeClient = None):
         logger.info("Not a mention in group/channel, ignoring")
         return
 
-    if not is_private and not is_allowed_user(message.from_user.id):
+    if not is_private and not is_allowed_user(message.from_user.id, claude):
         logger.info(f"User {message.from_user.id} not allowed in group {message.chat.id}")
         return
 
@@ -60,7 +60,7 @@ async def handle_message(message: Message, claude: ClaudeClient = None):
 
     except Exception as e:
         logger.error(f"Error processing message: {e}", exc_info=True)
-        await message.answer(f"Произошла ошибка: {str(e)}")
+        await message.answer("Произошла ошибка при обработке запроса. Попробуйте позже.")
 
 
 def _strip_mentions(text: str, bot_username: str) -> str:
