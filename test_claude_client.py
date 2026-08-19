@@ -39,26 +39,45 @@ class TestClaudeClientInit:
             assert client.model == 'custom-model'
 
     def test_init_with_defaults(self):
-        with patch.dict('os.environ', {}, clear=True), \
-             patch.object(Path, 'mkdir'), \
+        with patch.dict('os.environ', {
+            'OMNIROUTE_API_KEY': 'dummy_key',
+            'TEST_MODE': '1'
+        }), patch.object(Path, 'mkdir'), \
              patch('claude_client.ClaudeClient._load_conversations'):
             client = ClaudeClient()
             assert client.model == 'kr/claude-sonnet-4.5'
 
+    def test_init_without_api_key(self):
+        """Test that ClaudeClient raises ValueError when OMNIROUTE_API_KEY is missing"""
+        with patch.dict('os.environ', {}, clear=True), \
+             patch.object(Path, 'mkdir'):
+            with pytest.raises(ValueError, match="OMNIROUTE_API_KEY not configured"):
+                ClaudeClient()
 
+    def test_init_with_dummy_api_key(self):
+        """Test that ClaudeClient raises ValueError when OMNIROUTE_API_KEY is dummy value"""
+        with patch.dict('os.environ', {
+            'OMNIROUTE_API_KEY': 'your_omniroute_api_key',
+            'TEST_MODE': '1'
+        }), patch.object(Path, 'mkdir'):
+            with pytest.raises(ValueError, match="OMNIROUTE_API_KEY not configured"):
+                ClaudeClient()
+
+
+@pytest.mark.asyncio
 class TestConversationManagement:
     def test_get_conversation_file(self, claude_client):
         file_path = claude_client._get_conversation_file(123)
         assert file_path.name == "chat_123.json"
 
-    def test_save_conversation(self, claude_client, temp_conversations_dir):
+    async def test_save_conversation(self, claude_client, temp_conversations_dir):
         chat_id = 123
         claude_client.conversations[chat_id] = [
             {"role": "user", "content": "test"},
             {"role": "assistant", "content": "response"}
         ]
 
-        claude_client._save_conversation(chat_id)
+        await claude_client._save_conversation(chat_id)
 
         file_path = temp_conversations_dir / "chat_123.json"
         assert file_path.exists()
@@ -85,14 +104,14 @@ class TestConversationManagement:
             assert 456 in client.conversations
             assert client.conversations[456] == test_data
 
-    def test_clear_history(self, claude_client, temp_conversations_dir):
+    async def test_clear_history(self, claude_client, temp_conversations_dir):
         chat_id = 789
         claude_client.conversations[chat_id] = [{"role": "user", "content": "test"}]
 
         file_path = temp_conversations_dir / "chat_789.json"
         file_path.write_text('[]')
 
-        claude_client.clear_history(chat_id)
+        await claude_client.clear_history(chat_id)
 
         assert chat_id not in claude_client.conversations
         assert not file_path.exists()
@@ -167,8 +186,7 @@ class TestGetResponse:
             await claude_client.get_response(chat_id, "Test", "TestUser")
 
         # Сообщение пользователя должно быть удалено при ошибке
-        assert chat_id not in claude_client.conversations or \
-               len(claude_client.conversations[chat_id]) == 0
+        assert len(claude_client.conversations.get(chat_id, [])) == 0
 
     async def test_get_response_calls_api_correctly(self, claude_client):
         chat_id = 500
@@ -194,26 +212,27 @@ class TestGetResponse:
         assert 'John' in call_args['messages'][0]['content']
 
 
+@pytest.mark.asyncio
 class TestChannelManagement:
-    def test_add_channel(self, claude_client, temp_conversations_dir):
+    async def test_add_channel(self, claude_client, temp_conversations_dir):
         """Test adding a channel to monitored list"""
-        result = claude_client.add_channel(123456789)
+        result = await claude_client.add_channel(123456789)
         assert result is True
         assert 123456789 in claude_client.monitored_channels
 
         # Second add should return False (already exists)
-        result = claude_client.add_channel(123456789)
+        result = await claude_client.add_channel(123456789)
         assert result is False
 
-    def test_remove_channel(self, claude_client, temp_conversations_dir):
+    async def test_remove_channel(self, claude_client, temp_conversations_dir):
         """Test removing a channel from monitored list"""
         claude_client.monitored_channels.add(123456789)
-        result = claude_client.remove_channel(123456789)
+        result = await claude_client.remove_channel(123456789)
         assert result is True
         assert 123456789 not in claude_client.monitored_channels
 
         # Remove non-existent should return False
-        result = claude_client.remove_channel(999999999)
+        result = await claude_client.remove_channel(999999999)
         assert result is False
 
     def test_get_monitored_channels(self, claude_client, temp_conversations_dir):
@@ -233,7 +252,7 @@ class TestChannelManagement:
         assert 123456789 in active
         assert active[123456789] == 0  # No messages yet
 
-    def test_monitored_channels_persistence(self, temp_conversations_dir):
+    async def test_monitored_channels_persistence(self, temp_conversations_dir):
         """Test that monitored channels persist across instances"""
         with patch.dict('os.environ', {
             'OMNIROUTE_API_KEY': 'test_key',
@@ -244,47 +263,44 @@ class TestChannelManagement:
             client1 = ClaudeClient()
             client1.conversations_dir = temp_conversations_dir
             client1.channels_file = temp_conversations_dir / "channels.json"
-            client1.add_channel(999888777)
+            await client1.add_channel(999888777)
 
-        # Second instance: should load the channel
+        # Second instance: should load the channel via _load_monitored_channels
         with patch.dict('os.environ', {
             'OMNIROUTE_API_KEY': 'test_key',
             'OMNIROUTE_BASE_URL': 'http://test.local/v1',
             'TEST_MODE': '1'
-        }), patch.object(Path, 'mkdir'), patch.object(ClaudeClient, '_load_conversations'), \
-         patch.object(ClaudeClient, '_load_monitored_channels'):
+        }), patch.object(Path, 'mkdir'):
             client2 = ClaudeClient()
             client2.conversations_dir = temp_conversations_dir
             client2.channels_file = temp_conversations_dir / "channels.json"
-            # Manually load monitored channels from file
-            with open(temp_conversations_dir / "channels.json", 'r') as f:
-                import json
-                data = json.load(f)
-                client2.monitored_channels = set(data.get('channels', []))
+            # _load_monitored_channels is called in __init__
+            client2._load_monitored_channels()
             assert 999888777 in client2.monitored_channels
 
 
+@pytest.mark.asyncio
 class TestUserManagement:
-    def test_add_user(self, claude_client, temp_conversations_dir):
+    async def test_add_user(self, claude_client, temp_conversations_dir):
         """Test adding a user to allowed list"""
-        result = claude_client.add_user(123456789, "username")
+        result = await claude_client.add_user(123456789, "username")
         assert result is True
         assert 123456789 in claude_client.allowed_users
         assert claude_client.allowed_users[123456789] == "username"
 
         # Second add should return False (already exists)
-        result = claude_client.add_user(123456789, "username")
+        result = await claude_client.add_user(123456789, "username")
         assert result is False
 
-    def test_remove_user(self, claude_client, temp_conversations_dir):
+    async def test_remove_user(self, claude_client, temp_conversations_dir):
         """Test removing a user from allowed list"""
         claude_client.allowed_users[123456789] = "username"
-        result = claude_client.remove_user(123456789)
+        result = await claude_client.remove_user(123456789)
         assert result is True
         assert 123456789 not in claude_client.allowed_users
 
         # Remove non-existent should return False
-        result = claude_client.remove_user(999999999)
+        result = await claude_client.remove_user(999999999)
         assert result is False
 
     def test_get_allowed_users(self, claude_client, temp_conversations_dir):
@@ -305,18 +321,18 @@ class TestUserManagement:
         assert claude_client.is_user_allowed(123456789) is True
         assert claude_client.is_user_allowed(999999999) is False
 
-    def test_user_persistence(self, temp_conversations_dir):
+    async def test_user_persistence(self, temp_conversations_dir):
         """Test that users persist across instances"""
         with patch.dict('os.environ', {
             'OMNIROUTE_API_KEY': 'test_key',
             'OMNIROUTE_BASE_URL': 'http://test.local/v1',
             'TEST_MODE': '1'
-        }), patch.object(Path, 'mkdir'), patch.object(ClaudeClient, '_load_conversations'), \
-             patch.object(ClaudeClient, '_load_monitored_channels'):
+        }), patch.object(Path, 'mkdir'):
+            # First instance: add a user
             client1 = ClaudeClient()
             client1.conversations_dir = temp_conversations_dir
             client1.users_file = temp_conversations_dir / "users.json"
-            client1.add_user(111222333, "testuser")
+            await client1.add_user(111222333, "testuser")
 
         # Check the file was saved in new format
         with open(temp_conversations_dir / "users.json", 'r') as f:
@@ -324,22 +340,15 @@ class TestUserManagement:
             assert isinstance(data.get('users', [])[0], dict)
             assert data['users'][0]['id'] == 111222333
 
+        # Second instance: should load via _load_allowed_users
         with patch.dict('os.environ', {
             'OMNIROUTE_API_KEY': 'test_key',
             'OMNIROUTE_BASE_URL': 'http://test.local/v1',
             'TEST_MODE': '1'
-        }), patch.object(Path, 'mkdir'), patch.object(ClaudeClient, '_load_conversations'), \
-             patch.object(ClaudeClient, '_load_monitored_channels'), patch.object(ClaudeClient, '_load_allowed_users'):
+        }), patch.object(Path, 'mkdir'):
             client2 = ClaudeClient()
             client2.conversations_dir = temp_conversations_dir
             client2.users_file = temp_conversations_dir / "users.json"
-            # Manually load from file
-            with open(temp_conversations_dir / "users.json", 'r') as f:
-                data = json.load(f)
-                users_list = data.get('users', [])
-                if users_list and isinstance(users_list[0], int):
-                    client2.allowed_users = {uid: "" for uid in users_list}
-                else:
-                    client2.allowed_users = {u['id']: u.get('username', '') for u in users_list}
+            client2._load_allowed_users()
             assert 111222333 in client2.allowed_users
             assert client2.allowed_users[111222333] == "testuser"

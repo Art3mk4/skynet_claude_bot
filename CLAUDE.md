@@ -1,36 +1,47 @@
 # CLAUDE.md
 
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
 ## Build & Run
 
 ```bash
-# Local
+# Local development
 pip install -r requirements.txt
 python main.py
 
+# Run tests
+pytest -v                    # All tests
+pytest test_handlers.py -v   # Specific test file
+pytest -k test_function_name # Specific test
+
 # Docker
-docker compose up --build
+docker compose up --build    # Build and start with tests
+docker compose logs -f       # View logs
 ```
 
 ## Architecture
 
-This is a Telegram bot using **aiogram 3.x** (async) that proxies requests to an OmniRoute-compatible API (wrapping Claude).
+Async Telegram bot (aiogram 3.x) that proxies to Claude via OmniRoute (OpenAI-compatible API).
 
-**Core Components:**
-- `main.py` — Entry point: init bot with aiogram, Tor proxy fallback, start polling
-- `handlers.py` — Message handlers: `/start`, `/clear`, `/help`, `/chats`, and general message routing
-- `claude_client.py` — Claude client via OpenAI-compatible API (AsyncOpenAI), conversation history management (JSON files)
+**Module Structure:**
+- `main.py` — Bot initialization, middleware (log_updates, inject_claude), proxy fallback logic
+- `handlers.py` — Non-command message handler: mention detection, text stripping, Claude response
+- `commands.py` — All command handlers (`/start`, `/clear`, `/user_add`, etc.)
+- `claude_client.py` — AsyncOpenAI client, conversation history (JSON), channel/user management
+- `permissions.py` — User whitelist checks (ALLOWED_USERS env + users.json)
+- `mentions.py` — Bot mention detection in groups/channels
 
 **Key Design Patterns:**
-- Async/await throughout (aiogram + aiohttp)
-- Conversation history persisted to `conversations/chat_{chat_id}.json`
-- Max 20 messages per conversation (sliding window)
-- Proxy support: Tor SOCKS5 with direct connection fallback
-- User whitelist via `ALLOWED_USERS` env var
+- Middleware injects `ClaudeClient` instance into handler data dict
+- Conversation history: `conversations/chat_{chat_id}.json`, max 20 messages (sliding window)
+- Two user sources: `ALLOWED_USERS` env (immutable) + `users.json` (runtime)
+- Two channel sources: active chats (auto-detected) + `channels.json` (manual)
+- Proxy: Tor SOCKS5 with 10s timeout test, falls back to direct connection
 
-**Mention Detection in Groups/Channels:**
-- Checks `message.entities` for Telegram MessageEntity mentions (most reliable)
-- Falls back to text search for `@username`, `skynet`, `скайнет`
-- Supports mentions with or without @ symbol
+**Mention Detection:**
+- Primary: `message.entities` for MessageEntity mentions (most reliable)
+- Fallback: regex search for `@username`, `skynet`, `скайнет` (case-insensitive)
+- Text stripping removes mentions and leftover punctuation
 
 ## Bot Behavior
 
@@ -67,8 +78,8 @@ To use the bot in a channel:
 
 ## Testing
 
-- **31 automated tests** run on every container startup
-- Tests cover: Claude client (11), Handlers (13), Main (7)
+- **85 automated tests** run on every container startup
+- Tests cover: Claude client (14), Handlers (22), Middleware (8), Main (7), plus additional edge cases
 - If tests fail, bot won't start
 - Run locally: `pytest -v`
 
