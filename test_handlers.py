@@ -65,38 +65,34 @@ def message_factory(mock_claude):
 
 class TestIsAllowedUser:
     def test_no_allowed_users_env(self):
-        with patch('os.getenv', return_value=''), \
-             patch('permissions.ClaudeClient') as MockClient:
-            mock_client = MockClient.return_value
-            mock_client.allowed_users = {}
-            assert is_allowed_user(123) is False
-            assert is_allowed_user(456) is False
+        mock_claude = Mock()
+        mock_claude.is_user_allowed = Mock(return_value=False)
+        with patch('os.getenv', return_value=''):
+            assert is_allowed_user(123, mock_claude) is False
+            assert is_allowed_user(456, mock_claude) is False
 
     def test_with_allowed_users(self):
-        with patch('os.getenv', return_value='123,456,789'), \
-             patch('permissions.ClaudeClient') as MockClient:
-            mock_client = MockClient.return_value
-            mock_client.allowed_users = {}
-            assert is_allowed_user(123) is True
-            assert is_allowed_user(456) is True
-            assert is_allowed_user(999) is False
+        mock_claude = Mock()
+        mock_claude.is_user_allowed = Mock(return_value=False)
+        with patch('os.getenv', return_value='123,456,789'):
+            assert is_allowed_user(123, mock_claude) is True
+            assert is_allowed_user(456, mock_claude) is True
+            assert is_allowed_user(999, mock_claude) is False
 
     def test_users_json_allowed(self):
-        with patch('os.getenv', return_value=''), \
-             patch('permissions.ClaudeClient') as MockClient:
-            mock_client = MockClient.return_value
-            mock_client.allowed_users = {111: 'user1'}
-            assert is_allowed_user(111) is True
-            assert is_allowed_user(222) is False
+        mock_claude = Mock()
+        mock_claude.is_user_allowed = Mock(side_effect=lambda uid: uid == 111)
+        with patch('os.getenv', return_value=''):
+            assert is_allowed_user(111, mock_claude) is True
+            assert is_allowed_user(222, mock_claude) is False
 
     def test_env_takes_priority(self):
-        with patch('os.getenv', return_value='333'), \
-             patch('permissions.ClaudeClient') as MockClient:
-            mock_client = MockClient.return_value
-            mock_client.allowed_users = {111: 'user1'}
-            assert is_allowed_user(333) is True
-            assert is_allowed_user(111) is True
-            assert is_allowed_user(999) is False
+        mock_claude = Mock()
+        mock_claude.is_user_allowed = Mock(side_effect=lambda uid: uid == 111)
+        with patch('os.getenv', return_value='333'):
+            assert is_allowed_user(333, mock_claude) is True
+            assert is_allowed_user(111, mock_claude) is True
+            assert is_allowed_user(999, mock_claude) is False
 
 
 # --- is_mention tests ---
@@ -214,14 +210,14 @@ class TestCmdStart:
     async def test_allowed(self, message_factory, mock_claude):
         message = message_factory(user_id=123)
         with patch('commands.is_allowed_user', return_value=True):
-            await cmd_start(message)
+            await cmd_start(message, claude=mock_claude)
             message.answer.assert_called_once()
             assert "SkyNet" in message.answer.call_args[0][0]
 
     async def test_not_allowed(self, message_factory, mock_claude):
         message = message_factory(user_id=999)
         with patch('commands.is_allowed_user', return_value=False):
-            await cmd_start(message)
+            await cmd_start(message, claude=mock_claude)
             message.answer.assert_called_once_with("У вас нет доступа к этому боту")
 
 
@@ -241,7 +237,7 @@ class TestCmdClear:
         from permissions import AllowedUserFilter
         filter_instance = AllowedUserFilter()
         with patch('permissions.is_allowed_user', return_value=False):
-            result = await filter_instance(message)
+            result = await filter_instance(message, claude=mock_claude)
             assert result is False
 
 
@@ -259,7 +255,7 @@ class TestCmdHelp:
         from permissions import AllowedUserFilter
         filter_instance = AllowedUserFilter()
         with patch('permissions.is_allowed_user', return_value=False):
-            result = await filter_instance(message)
+            result = await filter_instance(message, claude=mock_claude)
             assert result is False
 
 
@@ -296,7 +292,7 @@ class TestCmdChannelsInfo:
         from permissions import AllowedUserFilter
         filter_instance = AllowedUserFilter()
         with patch('permissions.is_allowed_user', return_value=False):
-            result = await filter_instance(message)
+            result = await filter_instance(message, claude=mock_claude)
             assert result is False
 
 
@@ -331,7 +327,7 @@ class TestCmdAddChannel:
         from permissions import AllowedUserFilter
         filter_instance = AllowedUserFilter()
         with patch('permissions.is_allowed_user', return_value=False):
-            result = await filter_instance(message)
+            result = await filter_instance(message, claude=mock_claude)
             assert result is False
 
 

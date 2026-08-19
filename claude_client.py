@@ -2,8 +2,9 @@ import os
 import json
 import logging
 import asyncio
+from collections import OrderedDict
 from pathlib import Path
-from typing import Dict, List, Set, Tuple
+from typing import Dict, List, Set
 from openai import AsyncOpenAI
 import aiofiles
 
@@ -32,9 +33,9 @@ class ClaudeClient:
         self.users_file = self.conversations_dir / "users.json"
         self.conversations_dir.mkdir(exist_ok=True)
 
-        # Async locks для защиты от race conditions при записи
-        self._conversation_locks: Dict[int, asyncio.Lock] = {}
-        self._lock_access_order: List[int] = []  # Track LRU for lock cleanup
+        # Async locks для защиты от race conditions при записи.
+        # OrderedDict хранит порядок последнего использования (LRU) для очистки.
+        self._conversation_locks: OrderedDict[int, asyncio.Lock] = OrderedDict()
         self._max_locks = 100  # Limit to prevent unbounded memory growth
         self._channels_lock = asyncio.Lock()
         self._users_lock = asyncio.Lock()
@@ -64,28 +65,18 @@ class ClaudeClient:
 
     async def _save_conversation(self, chat_id: int):
         """Сохраняет диалог на диск с защитой от race conditions"""
-        if chat_id not in self._conversation_locks:
-            self._conversation_locks[chat_id] = asyncio.Lock()
-            self._lock_access_order.append(chat_id)
+        lock = self._conversation_locks.setdefault(chat_id, asyncio.Lock())
+        self._conversation_locks.move_to_end(chat_id)
 
-            # Cleanup old locks if limit exceeded
-            if len(self._conversation_locks) > self._max_locks:
-                # Remove oldest lock that's not currently in use
-                for old_chat_id in self._lock_access_order[:]:
-                    if old_chat_id in self._conversation_locks:
-                        lock = self._conversation_locks[old_chat_id]
-                        if not lock.locked():
-                            del self._conversation_locks[old_chat_id]
-                            self._lock_access_order.remove(old_chat_id)
-                            logger.debug(f"Cleaned up unused lock for chat {old_chat_id}")
-                            break
-        else:
-            # Update access order for LRU
-            if chat_id in self._lock_access_order:
-                self._lock_access_order.remove(chat_id)
-            self._lock_access_order.append(chat_id)
+        # Cleanup oldest unused lock if limit exceeded
+        if len(self._conversation_locks) > self._max_locks:
+            for old_chat_id, old_lock in self._conversation_locks.items():
+                if old_chat_id != chat_id and not old_lock.locked():
+                    del self._conversation_locks[old_chat_id]
+                    logger.debug(f"Cleaned up unused lock for chat {old_chat_id}")
+                    break
 
-        async with self._conversation_locks[chat_id]:
+        async with lock:
             try:
                 file = self._get_conversation_file(chat_id)
                 async with aiofiles.open(file, 'w', encoding='utf-8') as f:
@@ -96,22 +87,19 @@ class ClaudeClient:
     async def clear_history(self, chat_id: int):
         """Очищает историю диалога"""
         # Wait for any pending writes to complete before clearing
-        if chat_id in self._conversation_locks:
-            async with self._conversation_locks[chat_id]:
-                # Now safe to clear
-                if chat_id in self.conversations:
-                    del self.conversations[chat_id]
+        lock = self._conversation_locks.get(chat_id)
+        if lock:
+            async with lock:
+                self.conversations.pop(chat_id, None)
         else:
-            if chat_id in self.conversations:
-                del self.conversations[chat_id]
+            self.conversations.pop(chat_id, None)
 
         file = self._get_conversation_file(chat_id)
         if file.exists():
             file.unlink()
 
         # Cleanup lock to prevent memory leak
-        if chat_id in self._conversation_locks:
-            del self._conversation_locks[chat_id]
+        self._conversation_locks.pop(chat_id, None)
 
         logger.info(f"Cleared conversation for chat {chat_id}")
 
