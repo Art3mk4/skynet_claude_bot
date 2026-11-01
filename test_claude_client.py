@@ -213,6 +213,46 @@ class TestGetResponse:
         assert 'John' in call_args['messages'][0]['content']
 
 
+class TestNewsGeneration:
+    @pytest.mark.asyncio
+    async def test_generate_news_is_stateless(self, claude_client):
+        mock_response = Mock()
+        mock_response.choices = [Mock()]
+        mock_response.choices[0].message.content = '  Готовая новость  '
+        mock_create = AsyncMock(return_value=mock_response)
+        claude_client.client.chat.completions.create = mock_create
+
+        result = await claude_client.generate_news('Сделай пост')
+
+        assert result == 'Готовая новость'
+        assert claude_client.conversations == {}
+        call_args = mock_create.call_args.kwargs
+        assert call_args['max_tokens'] == 2048
+        assert call_args['messages'][-1] == {'role': 'user', 'content': 'Сделай пост'}
+        assert len(call_args['messages']) == 2
+
+    @pytest.mark.asyncio
+    async def test_generate_news_rejects_truncated_response(self, claude_client):
+        mock_response = Mock()
+        mock_response.choices = [Mock()]
+        mock_response.choices[0].finish_reason = 'length'
+        mock_response.choices[0].message.content = 'Обрезанный посреди предложения текст'
+        claude_client.client.chat.completions.create = AsyncMock(return_value=mock_response)
+
+        with pytest.raises(ValueError, match='прервана'):
+            await claude_client.generate_news('Сделай пост')
+
+    @pytest.mark.asyncio
+    async def test_generate_news_rejects_empty_choices(self, claude_client):
+        # Контент-фильтр или ошибка апстрима: гейтвей возвращает choices: []
+        mock_response = Mock()
+        mock_response.choices = []
+        claude_client.client.chat.completions.create = AsyncMock(return_value=mock_response)
+
+        with pytest.raises(ValueError, match='без вариантов'):
+            await claude_client.generate_news('Сделай пост')
+
+
 class TestChannelManagement:
     @pytest.mark.asyncio
     async def test_add_channel(self, claude_client, temp_conversations_dir):

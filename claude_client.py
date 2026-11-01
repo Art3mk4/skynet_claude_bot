@@ -278,3 +278,30 @@ class ClaudeClient:
             if self.conversations[chat_id]:
                 self.conversations[chat_id].pop()
             raise
+
+    async def generate_news(self, instruction: str) -> str:
+        response = await self.client.chat.completions.create(
+            model=self.model,
+            messages=[
+                {
+                    "role": "system",
+                    "content": (
+                        "Ты редактор Telegram-канала. Создай один готовый пост на русском языке "
+                        "по инструкции пользователя. Отвечай только текстом публикации без пояснений, "
+                        "используй обычный текст и не превышай 3500 символов. Не выдумывай факты, "
+                        "источники или ссылки. Если для запроса нужны актуальные данные, которых у тебя нет, "
+                        "верни пустой ответ."
+                    )
+                },
+                {"role": "user", "content": instruction}
+            ],
+            max_tokens=2048,
+            temperature=0.7
+        )
+        if not response.choices:
+            raise ValueError('OmniRoute вернул ответ без вариантов')
+        choice = response.choices[0]
+        if choice.finish_reason == 'length':
+            raise ValueError('Генерация прервана по лимиту токенов')
+        content = choice.message.content
+        return content.strip() if content else ""

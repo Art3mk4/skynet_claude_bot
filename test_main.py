@@ -19,7 +19,8 @@ class TestMain:
              }.get(key, default)), \
              patch('main.Bot') as mock_bot_class, \
              patch('main.Dispatcher') as mock_dp_class, \
-             patch('main.ClaudeClient') as mock_claude_class:
+             patch('main.ClaudeClient') as mock_claude_class, \
+             patch('main.NewsScheduler') as mock_news_scheduler_class:
 
             mock_bot = Mock()
             mock_bot_class.return_value = mock_bot
@@ -37,6 +38,7 @@ class TestMain:
                 allowed_updates=[]
             )
             mock_dp.__setitem__.assert_any_call('claude', mock_claude_class.return_value)
+            mock_news_scheduler_class.return_value.shutdown.assert_called_once_with()
 
     async def test_main_with_proxy_success(self):
         with patch('main.load_dotenv'), \
@@ -111,7 +113,8 @@ class TestMain:
              }.get(key, default)), \
              patch('main.Bot') as mock_bot_class, \
              patch('main.Dispatcher') as mock_dp_class, \
-             patch('main.ClaudeClient'):
+             patch('main.ClaudeClient'), \
+             patch('main.NewsScheduler') as mock_news_scheduler_class:
 
             mock_bot = Mock()
             mock_bot_class.return_value = mock_bot
@@ -123,6 +126,8 @@ class TestMain:
 
             with pytest.raises(Exception, match="Polling failed"):
                 await main()
+
+            mock_news_scheduler_class.return_value.shutdown.assert_called_once_with()
 
     async def test_main_includes_routers(self):
         """Verify that both handlers and commands routers are included"""
