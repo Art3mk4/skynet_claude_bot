@@ -8,7 +8,7 @@ from aiogram.filters import Command, CommandStart
 
 from permissions import is_allowed_user, AllowedUserFilter
 from claude_client import ClaudeClient
-from news_scheduler import NewsConfigurationError, NewsScheduler
+from news_scheduler import NewsConfigurationError, NewsScheduler, member_can_publish
 
 logger = logging.getLogger(__name__)
 router = Router()
@@ -540,14 +540,12 @@ async def cmd_news_del(message: Message, claude: ClaudeClient, news_scheduler: N
 
 async def _get_available_news_channels(message: Message, claude: ClaudeClient) -> list[tuple[int, str]]:
     channels = []
-    bot_info = await message.bot.me()
     for channel_id in sorted(claude.get_monitored_channels()):
         try:
             chat = await message.bot.get_chat(channel_id)
             if chat.type != 'channel':
                 continue
-            member = await message.bot.get_chat_member(channel_id, bot_info.id)
-            if member.status != 'administrator' or not member.can_post_messages:
+            if not await member_can_publish(message.bot, channel_id):
                 continue
             channels.append((channel_id, chat.title or str(channel_id)))
         except Exception as error:

@@ -30,6 +30,17 @@ class NewsConfigurationError(Exception):
     pass
 
 
+async def member_can_publish(bot: Bot, channel_id: Union[int, str]) -> bool:
+    """Проверяет, что бот — администратор чата с правом Post messages.
+
+    Бросает исключение при ошибке Telegram API; вызывающий код сам решает,
+    fatal это или пропуск канала.
+    """
+    bot_info = await bot.me()
+    member = await bot.get_chat_member(channel_id, bot_info.id)
+    return member.status == 'administrator' and bool(member.can_post_messages)
+
+
 class NewsScheduler:
     def __init__(self, bot: Bot, claude: ClaudeClient, jobs_file: Optional[Path] = None):
         self.bot = bot
@@ -364,13 +375,12 @@ class NewsScheduler:
 
     async def _check_channel_access(self, channel_id: Union[int, str]):
         try:
-            bot_info = await self.bot.me()
-            member = await self.bot.get_chat_member(channel_id, bot_info.id)
+            can_publish = await member_can_publish(self.bot, channel_id)
         except Exception as error:
             raise NewsConfigurationError(
                 f'Не удалось проверить доступ к каналу {channel_id}: {error}'
             ) from error
-        if member.status != 'administrator' or not member.can_post_messages:
+        if not can_publish:
             raise NewsConfigurationError(
                 f'Бот не является администратором канала {channel_id} с правом Post messages'
             )
