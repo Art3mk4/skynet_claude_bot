@@ -163,7 +163,7 @@ Set `NEWS_CHANNEL_ID` as the optional default channel and grant the bot the **Po
 | `/news_run <id>` | Generate and publish a post immediately |
 | `/news_del <id>` | Delete a scheduled job |
 
-OmniRoute generates text from the instruction but does not fetch or verify current news. External sources are required for factual news digests. Generation is attempted up to three times with exponential backoff. Empty or overlong responses are not published, and failed Telegram sends are not retried automatically because the delivery result may be uncertain. Failures are saved in the job and optionally reported to `ADMIN_USER_ID`.
+OmniRoute generates text from the instruction but does not fetch or verify current news. External sources are required for factual news digests. Generation is attempted up to three times with exponential backoff. Empty or overlong responses are not published, and failed Telegram sends are not retried automatically because the delivery result may be uncertain. Failures are saved in the job and optionally reported to `ADMIN_USER_ID`. Delivery requires the recipient to have messaged the bot at least once — Telegram forbids unsolicited bot messages; failed notifications are only logged.
 
 Writes use atomic file replacement. A process lock prevents two bot instances from running schedulers on the same jobs file. Run only one scheduler instance for each `conversations/` directory; the second instance will fail to start rather than risk duplicate posts. The existing `finally` block in `main.py` shuts down APScheduler and releases the lock.
 
@@ -214,13 +214,13 @@ claude_bot/
 
 The bot includes comprehensive test coverage:
 
-- **25 tests** for Claude client (API, conversation, channel, user & news generation)
+- **26 tests** for Claude client (API, conversation, channel, user & news generation)
 - **51 tests** for handlers and commands (mentions, permissions, message handling, commands)
 - **51 tests** for scheduled news (jobs, channel assignment, generation, publishing, commands)
 - **5 tests** for middleware (log_updates)
 - **7 tests** for main (proxy, single shared `ClaudeClient`, initialization, error handling)
 
-All 139 tests run automatically on container startup using pytest. If tests fail, the bot won't start.
+All 140 tests run automatically on container startup using pytest. If tests fail, the bot won't start.
 
 ## 🌐 OmniRoute
 

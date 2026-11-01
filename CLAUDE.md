@@ -99,7 +99,7 @@ For group/channel support, **Privacy Mode must be disabled** in @BotFather:
 | `NEWS_CHANNEL_ID` | Optional default numeric channel ID or public `@username`; private channels require numeric IDs and all targets require Post messages | No |
 | `NEWS_TIMEZONE` | Valid IANA timezone for scheduled posts | No (default: `Europe/Moscow`) |
 | `NEWS_MAX_JOBS` | Positive integer limit for scheduled news jobs | No (default: `20`) |
-| `ADMIN_USER_ID` | Numeric user ID for scheduled publication failure notifications | No |
+| `ADMIN_USER_ID` | Numeric user ID for scheduled publication failure notifications (recipient must have messaged the bot first — Telegram blocks unsolicited bot messages) | No |
 
 ## Important Notes
 
