@@ -462,7 +462,7 @@ async def cmd_news_list(message: Message, claude: ClaudeClient, news_scheduler: 
         if next_run:
             response += f"Следующий запуск: {next_run.strftime('%d.%m.%Y %H:%M %Z')}\n"
         if job.get('last_error'):
-            response += "Последний запуск завершился ошибкой\n"
+            response += f"Последняя ошибка: {job['last_error']}\n"
 
     await _answer_long_text(message, response)
 
@@ -502,11 +502,14 @@ async def cmd_news_run(message: Message, claude: ClaudeClient, news_scheduler: N
     try:
         await news_scheduler.run_now(args[1])
     except (ValueError, NewsConfigurationError) as error:
-        await message.answer(str(error))
+        await message.answer(f"{error}\nАвтоматический повтор отправки не выполнялся.")
         return
     except Exception as error:
         logger.error(f"Cannot run scheduled news job {args[1]}: {error}", exc_info=True)
-        await message.answer("Не удалось опубликовать новость. Автоматический повтор не выполнялся.")
+        await message.answer(
+            f"Не удалось опубликовать новость: {error}\n"
+            "Автоматический повтор отправки не выполнялся."
+        )
         return
     await message.answer("Новость опубликована")
 

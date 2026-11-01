@@ -51,11 +51,12 @@ Async Telegram bot (aiogram 3.x) that proxies to Claude via OmniRoute (OpenAI-co
 - Async file writes go through a per-chat `asyncio.Lock` (`_conversation_locks`, LRU-capped at 100 entries) to avoid concurrent-write corruption; `channels.json`/`users.json` each have their own single lock.
 
 **Scheduled news:**
-- `/news_add daily HH:MM <instruction>` and `/news_add weekly <mon-sun> HH:MM <instruction>` create persistent jobs in `conversations/news_jobs.json`; `/news_list`, `/news_assign`, `/news_preview`, `/news_run`, and `/news_del` manage them.
-- `ClaudeClient.generate_news()` is stateless and does not modify conversation history. OmniRoute does not fetch or verify current news; factual digests require separate external sources.
-- The scheduler restores jobs at startup and publishes plain text using `NEWS_TIMEZONE` (default `Europe/Moscow`). Each job can have its own `channel_id`; jobs without one fall back to `NEWS_CHANNEL_ID` for backward compatibility.
-- `/news_assign <id>` shows inline buttons for monitored channels where the bot is an administrator with Post messages permission. The callback revalidates access before saving the selection.
-- Empty/overlong generations are rejected. Failed or uncertain Telegram sends are not blindly retried. Run only one scheduler instance to avoid duplicate posts.
+- `/news_add daily HH:MM <instruction>` and `/news_add weekly <mon-sun> HH:MM <instruction>` create persistent jobs in `conversations/news_jobs.json`; `/news_list`, `/news_assign`, `/news_preview`, `/news_run`, and `/news_del` manage them. Time requires leading zeroes, weekdays use English abbreviations, instructions are capped at 4000 characters, and `NEWS_MAX_JOBS` caps job count (default 20).
+- `ClaudeClient.generate_news()` is stateless and does not modify conversation history. OmniRoute does not fetch or verify current news; factual digests require separate external sources. Generation errors are retried up to three times with 1s/2s backoff.
+- The scheduler restores and validates jobs at startup and publishes plain text using `NEWS_TIMEZONE` (default `Europe/Moscow`). Invalid timezone/channel configuration fails fast. Each job can have its own `channel_id`; jobs without one fall back to `NEWS_CHANNEL_ID` for backward compatibility.
+- `/news_assign <id>` shows inline buttons for monitored channels where the bot is an administrator with Post messages permission. The callback revalidates access before saving the selection, and every manual/scheduled run checks the permission again before generation.
+- Empty/overlong generations are rejected. Failed or uncertain Telegram sends are not retried. Failures are saved in `last_error` and optionally sent to `ADMIN_USER_ID`.
+- Job mutations are serialized with `asyncio.Lock`, and JSON is saved by atomic replacement. A non-blocking `fcntl.flock` prevents a second active scheduler on the same jobs file. Run only one scheduler instance per shared `conversations/` directory. `main.py` shuts down APScheduler and releases the process lock in `finally`.
 
 **Mention Detection (`mentions.py`):**
 - Primary: `message.entities` for `mention`-type entities (most reliable, avoids false positives from bot username substrings).
@@ -92,8 +93,10 @@ For group/channel support, **Privacy Mode must be disabled** in @BotFather:
 | `OMNIROUTE_MODEL` | Model to use | No (default: `kr/claude-sonnet-4.5`) |
 | `OMNIROUTE_API_KEY` | OmniRoute API key (must not start with `your_`, or `ClaudeClient.__init__` raises) | Yes |
 | `ALLOWED_USERS` | Comma-separated user IDs | No |
-| `NEWS_CHANNEL_ID` | Optional default numeric channel ID or `@channelusername`; jobs can override it | No |
-| `NEWS_TIMEZONE` | IANA timezone for scheduled posts | No (default: `Europe/Moscow`) |
+| `NEWS_CHANNEL_ID` | Optional default numeric channel ID or public `@username`; private channels require numeric IDs and all targets require Post messages | No |
+| `NEWS_TIMEZONE` | Valid IANA timezone for scheduled posts | No (default: `Europe/Moscow`) |
+| `NEWS_MAX_JOBS` | Positive integer limit for scheduled news jobs | No (default: `20`) |
+| `ADMIN_USER_ID` | Numeric user ID for scheduled publication failure notifications | No |
 
 ## Important Notes
 

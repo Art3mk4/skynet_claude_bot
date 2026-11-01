@@ -85,11 +85,18 @@ OMNIROUTE_MODEL=kr/claude-sonnet-4.5
 # Example: ALLOWED_USERS=123456789,987654321
 ALLOWED_USERS=
 
-# Optional default channel for scheduled news posts (numeric ID or @channelusername)
+# Optional default channel: numeric ID or @username for public channels.
+# Private channels require a numeric ID. Bot needs Post messages permission.
 NEWS_CHANNEL_ID=
 
-# Timezone for scheduled news posts (optional)
+# IANA timezone for scheduled news posts (optional)
 NEWS_TIMEZONE=Europe/Moscow
+
+# Maximum number of scheduled news jobs (optional)
+NEWS_MAX_JOBS=20
+
+# Optional numeric user ID for publication failure notifications
+ADMIN_USER_ID=
 ```
 
 ## 📋 Bot Setup Guide
@@ -144,19 +151,21 @@ Telegram bots cannot receive messages directly from channels. To use the bot wit
 
 ### Scheduled News (Private Chat Only)
 
-Set `NEWS_CHANNEL_ID` as the optional default channel and grant the bot the **Post messages** administrator permission in every target channel. Jobs use `NEWS_TIMEZONE` (default: `Europe/Moscow`) and persist in `conversations/news_jobs.json` across restarts. Each job can override the default with its own channel.
+Set `NEWS_CHANNEL_ID` as the optional default channel and grant the bot the **Post messages** administrator permission in every target channel. Use a numeric ID (for example, `-1001234567890`) for private channels; public channels also accept `@username`. Jobs use `NEWS_TIMEZONE` (default: `Europe/Moscow`) and persist in `conversations/news_jobs.json` across restarts. Each job can override the default with its own channel. `NEWS_MAX_JOBS` limits the number of jobs (default: 20), and instructions are limited to 4000 characters.
 
 | Command | Description |
 |---------|-------------|
 | `/news_add daily 09:00 <instruction>` | Generate and publish a post every day |
 | `/news_add weekly mon 10:00 <instruction>` | Generate and publish a post every week |
-| `/news_list` | List jobs, channels, and next run times |
+| `/news_list` | List jobs, channels, next run times, and last errors |
 | `/news_assign <id>` | Choose a channel from monitored channels with publishing permission |
 | `/news_preview <id>` | Generate a post in private chat without publishing |
 | `/news_run <id>` | Generate and publish a post immediately |
 | `/news_del <id>` | Delete a scheduled job |
 
-OmniRoute generates text from the instruction but does not fetch or verify current news. External sources are required for factual news digests. Empty or overlong responses are not published, and failed Telegram sends are not retried automatically. Only one bot instance should run the scheduler.
+OmniRoute generates text from the instruction but does not fetch or verify current news. External sources are required for factual news digests. Generation is attempted up to three times with exponential backoff. Empty or overlong responses are not published, and failed Telegram sends are not retried automatically because the delivery result may be uncertain. Failures are saved in the job and optionally reported to `ADMIN_USER_ID`.
+
+Writes use atomic file replacement. A process lock prevents two bot instances from running schedulers on the same jobs file. Run only one scheduler instance for each `conversations/` directory; the second instance will fail to start rather than risk duplicate posts. The existing `finally` block in `main.py` shuts down APScheduler and releases the lock.
 
 **Note:** Channel management and user management commands only work in private chats.
 
@@ -205,11 +214,11 @@ The bot includes comprehensive test coverage:
 
 - **24 tests** for Claude client (API, conversation, channel, user & news generation)
 - **51 tests** for handlers and commands (mentions, permissions, message handling, commands)
-- **27 tests** for scheduled news (jobs, channel assignment, generation, publishing, commands)
+- **45 tests** for scheduled news (jobs, channel assignment, generation, publishing, commands)
 - **5 tests** for middleware (log_updates)
 - **7 tests** for main (proxy, single shared `ClaudeClient`, initialization, error handling)
 
-All 114 tests run automatically on container startup using pytest. If tests fail, the bot won't start.
+All 132 tests run automatically on container startup using pytest. If tests fail, the bot won't start.
 
 ## 🌐 OmniRoute
 
