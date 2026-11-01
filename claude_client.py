@@ -295,8 +295,11 @@ class ClaudeClient:
                 },
                 {"role": "user", "content": instruction}
             ],
-            max_tokens=1200,
+            max_tokens=2048,
             temperature=0.7
         )
-        content = response.choices[0].message.content
+        choice = response.choices[0]
+        if choice.finish_reason == 'length':
+            raise ValueError('Генерация прервана по лимиту токенов')
+        content = choice.message.content
         return content.strip() if content else ""

@@ -227,9 +227,20 @@ class TestNewsGeneration:
         assert result == 'Готовая новость'
         assert claude_client.conversations == {}
         call_args = mock_create.call_args.kwargs
-        assert call_args['max_tokens'] == 1200
+        assert call_args['max_tokens'] == 2048
         assert call_args['messages'][-1] == {'role': 'user', 'content': 'Сделай пост'}
         assert len(call_args['messages']) == 2
+
+    @pytest.mark.asyncio
+    async def test_generate_news_rejects_truncated_response(self, claude_client):
+        mock_response = Mock()
+        mock_response.choices = [Mock()]
+        mock_response.choices[0].finish_reason = 'length'
+        mock_response.choices[0].message.content = 'Обрезанный посреди предложения текст'
+        claude_client.client.chat.completions.create = AsyncMock(return_value=mock_response)
+
+        with pytest.raises(ValueError, match='прервана'):
+            await claude_client.generate_news('Сделай пост')
 
 
 class TestChannelManagement:
