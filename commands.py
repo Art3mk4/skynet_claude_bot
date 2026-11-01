@@ -11,12 +11,38 @@ from claude_client import ClaudeClient
 logger = logging.getLogger(__name__)
 router = Router()
 
+COMMANDS_LIST = (
+    "/start - Начать\n"
+    "/clear - Очистить историю диалога\n"
+    "/chats - Список активных чатов с историей\n"
+    "/channels - Список каналов и групп, где я администратор\n"
+    "/user_list - Список разрешённых пользователей\n"
+    "/user_add <id> - Добавить пользователя\n"
+    "/user_del <id> - Удалить пользователя\n"
+    "/add_channel <id> - Добавить канал\n"
+    "/remove_channel <id> - Удалить канал\n"
+    "/help - Помощь"
+)
+
+
+async def _require_private_allowed_user(message: Message, claude: ClaudeClient) -> bool:
+    """Общая проверка для команд, доступных только разрешённым пользователям в личке"""
+    if message.chat.type != 'private':
+        await message.answer("Эта команда доступна только в личных сообщениях")
+        return False
+
+    if not is_allowed_user(message.from_user.id, claude):
+        await message.answer("У вас нет доступа к этой команде")
+        return False
+
+    return True
+
 
 @router.message(CommandStart())
-async def cmd_start(message: Message) -> None:
+async def cmd_start(message: Message, claude: ClaudeClient) -> None:
     logger.info(f"/start command from user {message.from_user.id}")
 
-    if not is_allowed_user(message.from_user.id):
+    if not is_allowed_user(message.from_user.id, claude):
         logger.warning(f"User {message.from_user.id} not allowed to use /start")
         await message.answer("У вас нет доступа к этому боту")
         return
@@ -25,17 +51,7 @@ async def cmd_start(message: Message) -> None:
         "Привет! Я SkyNet, AI ассистент на базе Claude от Anthropic.\n\n"
         "Упомяни меня (@username или просто 'skynet') в сообщении, и я отвечу.\n"
         "Работаю в группах, каналах и комментариях к постам.\n\n"
-        "Команды:\n"
-        "/start - Начать\n"
-        "/clear - Очистить историю диалога\n"
-        "/chats - Список активных чатов с историей\n"
-        "/channels - Список каналов и групп, где я администратор\n"
-        "/user_list - Список разрешённых пользователей\n"
-        "/user_add <id> - Добавить пользователя\n"
-        "/user_del <id> - Удалить пользователя\n"
-        "/add_channel <id> - Добавить канал\n"
-        "/remove_channel <id> - Удалить канал\n"
-        "/help - Помощь"
+        "Команды:\n" + COMMANDS_LIST
     )
 
 
@@ -245,13 +261,7 @@ async def cmd_remove_channel(message: Message, claude: ClaudeClient) -> None:
 async def cmd_user_add(message: Message, claude: ClaudeClient) -> None:
     logger.info(f"/user_add command from user {message.from_user.id}, text: {message.text}")
 
-    if message.chat.type != 'private':
-        await message.answer("Эта команда доступна только в личных сообщениях")
-        return
-
-    if not is_allowed_user(message.from_user.id):
-        logger.warning(f"User {message.from_user.id} is not allowed to use /user_add")
-        await message.answer("У вас нет доступа к этой команде")
+    if not await _require_private_allowed_user(message, claude):
         return
 
     args = message.text.split()
@@ -290,12 +300,7 @@ async def cmd_user_add(message: Message, claude: ClaudeClient) -> None:
 
 @router.message(Command('user_del'))
 async def cmd_user_del(message: Message, claude: ClaudeClient) -> None:
-    if message.chat.type != 'private':
-        await message.answer("Эта команда доступна только в личных сообщениях")
-        return
-
-    if not is_allowed_user(message.from_user.id):
-        await message.answer("У вас нет доступа к этой команде")
+    if not await _require_private_allowed_user(message, claude):
         return
 
     args = message.text.split()
@@ -326,12 +331,7 @@ async def cmd_user_del(message: Message, claude: ClaudeClient) -> None:
 
 @router.message(Command('user_list'))
 async def cmd_users_list(message: Message, claude: ClaudeClient) -> None:
-    if message.chat.type != 'private':
-        await message.answer("Эта команда доступна только в личных сообщениях")
-        return
-
-    if not is_allowed_user(message.from_user.id):
-        await message.answer("У вас нет доступа к этой команде")
+    if not await _require_private_allowed_user(message, claude):
         return
 
     allowed = claude.get_allowed_users()

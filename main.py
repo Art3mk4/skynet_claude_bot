@@ -40,13 +40,6 @@ async def log_updates(handler, event: Update, data: dict):
     return await handler(event, data)
 
 
-async def inject_claude(handler, event, data):
-    """Middleware, injects ClaudeClient instance into handler data"""
-    if 'claude' not in data:
-        data['claude'] = ClaudeClient()
-    return await handler(event, data)
-
-
 async def main():
     load_dotenv()
 
@@ -76,8 +69,8 @@ async def main():
         session=session
     )
     dp = Dispatcher()
+    dp['claude'] = ClaudeClient()
     dp.update.middleware(log_updates)
-    dp.update.middleware(inject_claude)
     dp.include_router(handlers_router)
     dp.include_router(commands_router)
 
