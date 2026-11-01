@@ -4,6 +4,7 @@ import os
 from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
+from aiogram.exceptions import TelegramBadRequest
 from aiogram.types import CallbackQuery, Message
 
 from commands import (
@@ -407,6 +408,29 @@ async def test_callback_news_assign_assigns_channel(message, news_scheduler_mock
 
     news_scheduler_mock.assign_channel.assert_awaited_once_with('job12345', -1001234567890)
     message.edit_text.assert_awaited_once()
+    callback.answer.assert_awaited_once_with('Канал назначен')
+
+
+@pytest.mark.asyncio
+async def test_callback_news_assign_answers_when_edit_is_noop(message, news_scheduler_mock):
+    _configure_channel(message)
+    message.edit_text = AsyncMock(side_effect=TelegramBadRequest(
+        method=Mock(),
+        message='message is not modified: specified new message content and reply markup '
+                'are exactly the same as a current content and reply markup of the message',
+    ))
+    callback = AsyncMock(spec=CallbackQuery)
+    callback.message = message
+    callback.from_user = Mock(id=123)
+    callback.data = 'news_assign:job12345:-1001234567890'
+    callback.answer = AsyncMock()
+    claude = Mock()
+    claude.get_monitored_channels.return_value = {-1001234567890}
+
+    with patch('commands.is_allowed_user', return_value=True):
+        await callback_news_assign(callback, claude, news_scheduler_mock)
+
+    news_scheduler_mock.assign_channel.assert_awaited_once_with('job12345', -1001234567890)
     callback.answer.assert_awaited_once_with('Канал назначен')
 
 

@@ -2,6 +2,7 @@ import logging
 import os
 
 from aiogram import F, Router
+from aiogram.exceptions import TelegramBadRequest
 from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
 from aiogram.filters import Command, CommandStart
 
@@ -621,5 +622,12 @@ async def callback_news_assign(
         await callback.answer("Не удалось назначить канал", show_alert=True)
         return
 
-    await callback.message.edit_text(f"Канал «{channel[1]}» назначен автопубликации {job_id}", parse_mode=None)
+    try:
+        await callback.message.edit_text(f"Канал «{channel[1]}» назначен автопубликации {job_id}", parse_mode=None)
+    except TelegramBadRequest as error:
+        # Telegram отвечает «message is not modified», если текст не изменился
+        # (повторное нажатие той же кнопки); ответ на колбэк обязателен в любом случае.
+        if 'message is not modified' not in str(error):
+            raise
+        logger.debug(f"Assign confirmation for job {job_id} was already up to date")
     await callback.answer("Канал назначен")
