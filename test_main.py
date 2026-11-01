@@ -47,8 +47,7 @@ class TestMain:
              patch('main.AiohttpSession') as mock_session_class, \
              patch('main.Bot') as mock_bot_class, \
              patch('main.Dispatcher') as mock_dp_class, \
-             patch('main.ClaudeClient'), \
-             patch('main.asyncio.wait_for', new_callable=AsyncMock) as mock_wait:
+             patch('main.ClaudeClient'):
 
             mock_session = Mock()
             mock_session.close = AsyncMock()
@@ -68,7 +67,7 @@ class TestMain:
             await main()
 
             assert mock_session_class.call_count == 1
-            mock_wait.assert_called_once()
+            mock_test_bot.get_me.assert_awaited_once()
             mock_session.close.assert_awaited_once()
             # The real bot (second Bot(...) call) must reuse the tested proxy session
             assert mock_bot_class.call_args_list[1].kwargs['session'] is mock_session
@@ -82,14 +81,13 @@ class TestMain:
              patch('main.AiohttpSession') as mock_session_class, \
              patch('main.Bot') as mock_bot_class, \
              patch('main.Dispatcher') as mock_dp_class, \
-             patch('main.ClaudeClient'), \
-             patch('main.asyncio.wait_for', side_effect=Exception("Proxy failed")):
+             patch('main.ClaudeClient'):
 
             mock_session = Mock()
             mock_session_class.return_value = mock_session
 
             mock_test_bot = Mock()
-            mock_test_bot.get_me = AsyncMock()
+            mock_test_bot.get_me = AsyncMock(side_effect=Exception("Proxy failed"))
 
             mock_bot = Mock()
             mock_bot_class.side_effect = [mock_test_bot, mock_bot]
