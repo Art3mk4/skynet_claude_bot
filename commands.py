@@ -430,7 +430,7 @@ async def cmd_news_add(message: Message, claude: ClaudeClient, news_scheduler: N
     if next_run:
         response += f"\nСледующий запуск: {next_run.strftime('%d.%m.%Y %H:%M %Z')}"
     job = news_scheduler.get_job(job_id)
-    if not job.get('channel_id'):
+    if job and not job.get('channel_id'):
         response += f"\nНазначьте канал: /news_assign {job_id}"
     await message.answer(response)
 

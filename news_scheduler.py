@@ -325,6 +325,14 @@ class NewsScheduler:
         scheduled_job = self.scheduler.get_job(job_id)
         return scheduled_job.next_run_time if scheduled_job else None
 
+    @staticmethod
+    def _validate_generated_text(text: str) -> str:
+        if not text:
+            raise ValueError('OmniRoute вернул пустой текст')
+        if len(text) > MAX_NEWS_LENGTH:
+            raise ValueError('Сгенерированная новость превышает 4096 символов')
+        return text
+
     async def _generate_news(self, job_id: str, instruction: str) -> str:
         for attempt in range(1, GENERATION_ATTEMPTS + 1):
             try:
@@ -349,9 +357,7 @@ class NewsScheduler:
         if job is None:
             raise ValueError('Задание не найдено')
         text = await self._generate_news(job_id, job['instruction'])
-        if not text:
-            raise ValueError('OmniRoute вернул пустой текст')
-        return text
+        return self._validate_generated_text(text)
 
     async def run_now(self, job_id: str) -> str:
         return await self._execute_job(job_id)
@@ -396,11 +402,9 @@ class NewsScheduler:
             if channel_id is None:
                 raise NewsConfigurationError('Для задания не назначен канал')
             await self._check_channel_access(channel_id)
-            text = await self._generate_news(job_id, job['instruction'])
-            if not text:
-                raise ValueError('OmniRoute вернул пустой текст')
-            if len(text) > MAX_NEWS_LENGTH:
-                raise ValueError('Сгенерированная новость превышает 4096 символов')
+            text = self._validate_generated_text(
+                await self._generate_news(job_id, job['instruction'])
+            )
 
             sent_message = await self.bot.send_message(
                 chat_id=channel_id,

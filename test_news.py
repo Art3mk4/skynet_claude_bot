@@ -216,6 +216,18 @@ async def test_preview_does_not_publish(scheduler, bot):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize('generated_text', ['', '   ', 'x' * 4097])
+async def test_preview_rejects_unpublishable_text(scheduler, bot, claude, generated_text):
+    job_id = await scheduler.add_job('daily', '09:00', 'Сделай пост', created_by=123)
+    claude.generate_news.return_value = generated_text
+
+    with pytest.raises(ValueError):
+        await scheduler.preview_job(job_id)
+
+    bot.send_message.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('generated_text', ['', '   ', 'x' * 4097])
 async def test_run_now_rejects_unpublishable_text(scheduler, bot, claude, generated_text):
     job_id = await scheduler.add_job('daily', '09:00', 'Сделай пост', created_by=123)
     claude.generate_news.return_value = generated_text
@@ -274,6 +286,17 @@ async def test_cmd_news_add(message, news_scheduler_mock):
         created_by=123,
         weekday=None,
     )
+    assert 'job12345' in message.answer.call_args.args[0]
+
+
+@pytest.mark.asyncio
+async def test_cmd_news_add_survives_missing_job(message, news_scheduler_mock):
+    message.text = '/news_add daily 09:00 Пост'
+    news_scheduler_mock.get_job = Mock(return_value=None)
+    with patch('commands.is_allowed_user', return_value=True):
+        await cmd_news_add(message, Mock(), news_scheduler_mock)
+
+    news_scheduler_mock.add_job.assert_awaited_once()
     assert 'job12345' in message.answer.call_args.args[0]
 
 
