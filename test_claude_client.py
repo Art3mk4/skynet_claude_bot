@@ -213,6 +213,25 @@ class TestGetResponse:
         assert 'John' in call_args['messages'][0]['content']
 
 
+class TestNewsGeneration:
+    @pytest.mark.asyncio
+    async def test_generate_news_is_stateless(self, claude_client):
+        mock_response = Mock()
+        mock_response.choices = [Mock()]
+        mock_response.choices[0].message.content = '  Готовая новость  '
+        mock_create = AsyncMock(return_value=mock_response)
+        claude_client.client.chat.completions.create = mock_create
+
+        result = await claude_client.generate_news('Сделай пост')
+
+        assert result == 'Готовая новость'
+        assert claude_client.conversations == {}
+        call_args = mock_create.call_args.kwargs
+        assert call_args['max_tokens'] == 1200
+        assert call_args['messages'][-1] == {'role': 'user', 'content': 'Сделай пост'}
+        assert len(call_args['messages']) == 2
+
+
 class TestChannelManagement:
     @pytest.mark.asyncio
     async def test_add_channel(self, claude_client, temp_conversations_dir):

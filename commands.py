@@ -7,6 +7,7 @@ from aiogram.filters import Command, CommandStart
 
 from permissions import is_allowed_user, AllowedUserFilter
 from claude_client import ClaudeClient
+from news_scheduler import NewsConfigurationError, NewsScheduler
 
 logger = logging.getLogger(__name__)
 router = Router()
@@ -21,7 +22,18 @@ COMMANDS_LIST = (
     "/user_del <id> - Удалить пользователя\n"
     "/add_channel <id> - Добавить канал\n"
     "/remove_channel <id> - Удалить канал\n"
+    "/news_add - Добавить автопубликацию\n"
+    "/news_list - Список автопубликаций\n"
+    "/news_preview <id> - Предпросмотр новости\n"
+    "/news_run <id> - Опубликовать сейчас\n"
+    "/news_del <id> - Удалить автопубликацию\n"
     "/help - Помощь"
+)
+
+NEWS_ADD_USAGE = (
+    "Использование:\n"
+    "/news_add daily 09:00 <инструкция>\n"
+    "/news_add weekly mon 10:00 <инструкция>"
 )
 
 
@@ -82,6 +94,11 @@ async def cmd_help(message: Message, claude: ClaudeClient) -> None:
         "/user_list - Список разрешённых пользователей\n"
         "/user_add &lt;id&gt; - Добавить пользователя\n"
         "/user_del &lt;id&gt; - Удалить пользователя\n"
+        "/news_add - Добавить автопубликацию\n"
+        "/news_list - Список автопубликаций\n"
+        "/news_preview &lt;id&gt; - Предпросмотр новости\n"
+        "/news_run &lt;id&gt; - Опубликовать сейчас\n"
+        "/news_del &lt;id&gt; - Удалить автопубликацию\n"
         "/help - Эта справка",
         parse_mode="HTML"
     )
@@ -358,3 +375,151 @@ async def cmd_users_list(message: Message, claude: ClaudeClient) -> None:
                 response += f"- {uid}\n"
 
     await message.answer(response)
+
+
+def _parse_news_add_input(text: str) -> tuple[str, str, str, str]:
+    parts = text.split(maxsplit=1)
+    if len(parts) < 2:
+        raise ValueError(NEWS_ADD_USAGE)
+
+    schedule_type = parts[1].split()[0].lower()
+    if schedule_type == 'daily':
+        parts = text.split(maxsplit=3)
+        if len(parts) != 4:
+            raise ValueError(NEWS_ADD_USAGE)
+        return schedule_type, parts[2], parts[3], ''
+    if schedule_type == 'weekly':
+        parts = text.split(maxsplit=4)
+        if len(parts) != 5:
+            raise ValueError(NEWS_ADD_USAGE)
+        return schedule_type, parts[3], parts[4], parts[2].lower()
+    raise ValueError(NEWS_ADD_USAGE)
+
+
+async def _answer_long_text(message: Message, text: str):
+    for offset in range(0, len(text), 4000):
+        await message.answer(text[offset:offset + 4000], parse_mode=None)
+
+
+@router.message(Command('news_add'))
+async def cmd_news_add(message: Message, claude: ClaudeClient, news_scheduler: NewsScheduler) -> None:
+    if not await _require_private_allowed_user(message, claude):
+        return
+
+    try:
+        schedule_type, time_value, instruction, weekday = _parse_news_add_input(message.text)
+        job_id = await news_scheduler.add_job(
+            schedule_type=schedule_type,
+            time_value=time_value,
+            instruction=instruction,
+            created_by=message.from_user.id,
+            weekday=weekday or None,
+        )
+    except (ValueError, NewsConfigurationError) as error:
+        await message.answer(str(error))
+        return
+    except Exception as error:
+        logger.error(f"Cannot create scheduled news job: {error}", exc_info=True)
+        await message.answer("Не удалось сохранить задание")
+        return
+
+    next_run = news_scheduler.get_next_run(job_id)
+    response = f"Автопубликация создана. ID: {job_id}"
+    if next_run:
+        response += f"\nСледующий запуск: {next_run.strftime('%d.%m.%Y %H:%M %Z')}"
+    await message.answer(response)
+
+
+@router.message(Command('news_list'))
+async def cmd_news_list(message: Message, claude: ClaudeClient, news_scheduler: NewsScheduler) -> None:
+    if not await _require_private_allowed_user(message, claude):
+        return
+
+    jobs = news_scheduler.get_jobs()
+    if not jobs:
+        await message.answer("Автопубликации не настроены")
+        return
+
+    response = "Автопубликации:\n"
+    for job in jobs:
+        schedule = f"{job['schedule_type']} {job['time']}"
+        if job['schedule_type'] == 'weekly':
+            schedule = f"{job['schedule_type']} {job['weekday']} {job['time']}"
+        next_run = news_scheduler.get_next_run(job['id'])
+        instruction = job['instruction']
+        if len(instruction) > 150:
+            instruction = instruction[:147] + '...'
+        response += f"\nID: {job['id']}\nРасписание: {schedule}\nИнструкция: {instruction}\n"
+        if next_run:
+            response += f"Следующий запуск: {next_run.strftime('%d.%m.%Y %H:%M %Z')}\n"
+        if job.get('last_error'):
+            response += "Последний запуск завершился ошибкой\n"
+
+    await _answer_long_text(message, response)
+
+
+@router.message(Command('news_preview'))
+async def cmd_news_preview(message: Message, claude: ClaudeClient, news_scheduler: NewsScheduler) -> None:
+    if not await _require_private_allowed_user(message, claude):
+        return
+
+    args = message.text.split()
+    if len(args) != 2:
+        await message.answer("Использование: /news_preview <id>")
+        return
+
+    try:
+        text = await news_scheduler.preview_job(args[1])
+    except ValueError as error:
+        await message.answer(str(error))
+        return
+    except Exception as error:
+        logger.error(f"Cannot preview scheduled news job {args[1]}: {error}", exc_info=True)
+        await message.answer("Не удалось сгенерировать новость")
+        return
+    await _answer_long_text(message, text)
+
+
+@router.message(Command('news_run'))
+async def cmd_news_run(message: Message, claude: ClaudeClient, news_scheduler: NewsScheduler) -> None:
+    if not await _require_private_allowed_user(message, claude):
+        return
+
+    args = message.text.split()
+    if len(args) != 2:
+        await message.answer("Использование: /news_run <id>")
+        return
+
+    try:
+        await news_scheduler.run_now(args[1])
+    except (ValueError, NewsConfigurationError) as error:
+        await message.answer(str(error))
+        return
+    except Exception as error:
+        logger.error(f"Cannot run scheduled news job {args[1]}: {error}", exc_info=True)
+        await message.answer("Не удалось опубликовать новость. Автоматический повтор не выполнялся.")
+        return
+    await message.answer("Новость опубликована")
+
+
+@router.message(Command('news_del'))
+async def cmd_news_del(message: Message, claude: ClaudeClient, news_scheduler: NewsScheduler) -> None:
+    if not await _require_private_allowed_user(message, claude):
+        return
+
+    args = message.text.split()
+    if len(args) != 2:
+        await message.answer("Использование: /news_del <id>")
+        return
+
+    try:
+        removed = await news_scheduler.remove_job(args[1])
+    except Exception as error:
+        logger.error(f"Cannot remove scheduled news job {args[1]}: {error}", exc_info=True)
+        await message.answer("Не удалось удалить задание")
+        return
+
+    if removed:
+        await message.answer("Автопубликация удалена")
+    else:
+        await message.answer("Задание не найдено")

@@ -12,6 +12,7 @@ from aiogram.types import Update
 from handlers import router as handlers_router
 from commands import router as commands_router
 from claude_client import ClaudeClient
+from news_scheduler import NewsScheduler
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -69,10 +70,14 @@ async def main():
         session=session
     )
     dp = Dispatcher()
-    dp['claude'] = ClaudeClient()
+    claude = ClaudeClient()
+    dp['claude'] = claude
+    news_scheduler = NewsScheduler(bot=bot, claude=claude)
+    dp['news_scheduler'] = news_scheduler
     dp.update.middleware(log_updates)
     dp.include_router(handlers_router)
     dp.include_router(commands_router)
+    news_scheduler.start()
 
     logger.info("Claude bot started")
 
@@ -81,6 +86,8 @@ async def main():
     except Exception as e:
         logger.error(f"Polling error: {e}", exc_info=True)
         raise
+    finally:
+        news_scheduler.shutdown()
 
 
 if __name__ == '__main__':

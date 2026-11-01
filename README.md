@@ -4,7 +4,7 @@
 
 ![Python](https://img.shields.io/badge/python-3.12+-blue.svg)
 ![License](https://img.shields.io/badge/license-MIT-green.svg)
-![Tests](https://img.shields.io/badge/tests-86-passing-brightgreen.svg)
+![Tests](https://img.shields.io/badge/tests-111-passing-brightgreen.svg)
 
 AI-powered Telegram bot using Claude Sonnet 4.5 through OmniRoute gateway.
 
@@ -19,7 +19,7 @@ AI-powered Telegram bot using Claude Sonnet 4.5 through OmniRoute gateway.
 - **Channel integration** - works through discussion groups
 - **Tor support** - SOCKS5 proxy with automatic fallback
 - **Docker-ready** - containerized deployment
-- **Tested** - 86 automated tests on startup
+- **Tested** - 111 automated tests on startup
 
 ## 🚀 Quick Start
 
@@ -84,6 +84,12 @@ OMNIROUTE_MODEL=kr/claude-sonnet-4.5
 # User IDs for private chat access (comma-separated, optional)
 # Example: ALLOWED_USERS=123456789,987654321
 ALLOWED_USERS=
+
+# Channel for scheduled news posts (numeric ID or @channelusername)
+NEWS_CHANNEL_ID=
+
+# Timezone for scheduled news posts (optional)
+NEWS_TIMEZONE=Europe/Moscow
 ```
 
 ## 📋 Bot Setup Guide
@@ -136,6 +142,21 @@ Telegram bots cannot receive messages directly from channels. To use the bot wit
 | `/user_add <id>` | Add user to allowed list |
 | `/user_del <id>` | Remove user from allowed list |
 
+### Scheduled News (Private Chat Only)
+
+Set `NEWS_CHANNEL_ID` and grant the bot the **Post messages** administrator permission in that channel. Jobs use `NEWS_TIMEZONE` (default: `Europe/Moscow`) and persist in `conversations/news_jobs.json` across restarts.
+
+| Command | Description |
+|---------|-------------|
+| `/news_add daily 09:00 <instruction>` | Generate and publish a post every day |
+| `/news_add weekly mon 10:00 <instruction>` | Generate and publish a post every week |
+| `/news_list` | List jobs and their next run times |
+| `/news_preview <id>` | Generate a post in private chat without publishing |
+| `/news_run <id>` | Generate and publish a post immediately |
+| `/news_del <id>` | Delete a scheduled job |
+
+OmniRoute generates text from the instruction but does not fetch or verify current news. External sources are required for factual news digests. Empty or overlong responses are not published, and failed Telegram sends are not retried automatically. Only one bot instance should run the scheduler.
+
 **Note:** Channel management and user management commands only work in private chats.
 
 ## 🛠️ Development
@@ -161,31 +182,33 @@ Tests run automatically on Docker startup. If tests fail, the bot won't start.
 
 ```
 claude_bot/
-├── main.py              # Bot entry point with middleware
+├── main.py              # Bot entry point and scheduler lifecycle
 ├── handlers.py          # General message handler (non-command)
 ├── commands.py          # All command handlers (/start, /clear, etc.)
 ├── permissions.py       # User permission checks
 ├── mentions.py          # Bot mention detection
 ├── claude_client.py     # OmniRoute API client + conversation management
+├── news_scheduler.py    # Scheduled news generation and publishing
 ├── entrypoint.sh        # Docker entrypoint with test runner
 ├── requirements.txt     # Python dependencies
 ├── Dockerfile           # Docker image definition
 ├── docker-compose.yml   # Docker Compose configuration
-├── test_*.py            # Test files (86 tests)
+├── test_*.py            # Test files (111 tests)
 ├── .env.example         # Environment template
-└── conversations/       # Saved conversations (persistent)
+└── conversations/       # Saved conversations and jobs (persistent)
 ```
 
 ## 🧪 Testing
 
 The bot includes comprehensive test coverage:
 
-- **23 tests** for Claude client (API, conversation, channel & user management)
+- **24 tests** for Claude client (API, conversation, channel, user & news generation)
 - **51 tests** for handlers and commands (mentions, permissions, message handling, commands)
+- **24 tests** for scheduled news (jobs, generation, publishing, commands)
 - **5 tests** for middleware (log_updates)
 - **7 tests** for main (proxy, single shared `ClaudeClient`, initialization, error handling)
 
-All 86 tests run automatically on container startup using pytest. If tests fail, the bot won't start.
+All 111 tests run automatically on container startup using pytest. If tests fail, the bot won't start.
 
 ## 🌐 OmniRoute
 
