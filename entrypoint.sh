@@ -1,14 +1,10 @@
 #!/bin/bash
 set -e
 
+# set -e: падение pytest прерывает скрипт и бот не стартует
 echo "Running tests..."
 TEST_MODE=1 python -m pytest -v --tb=short
+echo "✓ All tests passed"
 
-if [ $? -eq 0 ]; then
-    echo "✓ All tests passed"
-    echo "Starting bot..."
-    exec python main.py
-else
-    echo "✗ Tests failed, not starting bot"
-    exit 1
-fi
+echo "Starting bot..."
+exec python main.py
