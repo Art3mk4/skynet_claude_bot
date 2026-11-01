@@ -4,7 +4,7 @@
 
 ![Python](https://img.shields.io/badge/python-3.12+-blue.svg)
 ![License](https://img.shields.io/badge/license-MIT-green.svg)
-![Tests](https://img.shields.io/badge/tests-111-passing-brightgreen.svg)
+![Tests](https://img.shields.io/badge/tests-114-passing-brightgreen.svg)
 
 AI-powered Telegram bot using Claude Sonnet 4.5 through OmniRoute gateway.
 
@@ -19,7 +19,7 @@ AI-powered Telegram bot using Claude Sonnet 4.5 through OmniRoute gateway.
 - **Channel integration** - works through discussion groups
 - **Tor support** - SOCKS5 proxy with automatic fallback
 - **Docker-ready** - containerized deployment
-- **Tested** - 111 automated tests on startup
+- **Tested** - 114 automated tests on startup
 
 ## 🚀 Quick Start
 
@@ -85,7 +85,7 @@ OMNIROUTE_MODEL=kr/claude-sonnet-4.5
 # Example: ALLOWED_USERS=123456789,987654321
 ALLOWED_USERS=
 
-# Channel for scheduled news posts (numeric ID or @channelusername)
+# Optional default channel for scheduled news posts (numeric ID or @channelusername)
 NEWS_CHANNEL_ID=
 
 # Timezone for scheduled news posts (optional)
@@ -144,13 +144,14 @@ Telegram bots cannot receive messages directly from channels. To use the bot wit
 
 ### Scheduled News (Private Chat Only)
 
-Set `NEWS_CHANNEL_ID` and grant the bot the **Post messages** administrator permission in that channel. Jobs use `NEWS_TIMEZONE` (default: `Europe/Moscow`) and persist in `conversations/news_jobs.json` across restarts.
+Set `NEWS_CHANNEL_ID` as the optional default channel and grant the bot the **Post messages** administrator permission in every target channel. Jobs use `NEWS_TIMEZONE` (default: `Europe/Moscow`) and persist in `conversations/news_jobs.json` across restarts. Each job can override the default with its own channel.
 
 | Command | Description |
 |---------|-------------|
 | `/news_add daily 09:00 <instruction>` | Generate and publish a post every day |
 | `/news_add weekly mon 10:00 <instruction>` | Generate and publish a post every week |
-| `/news_list` | List jobs and their next run times |
+| `/news_list` | List jobs, channels, and next run times |
+| `/news_assign <id>` | Choose a channel from monitored channels with publishing permission |
 | `/news_preview <id>` | Generate a post in private chat without publishing |
 | `/news_run <id>` | Generate and publish a post immediately |
 | `/news_del <id>` | Delete a scheduled job |
@@ -193,7 +194,7 @@ claude_bot/
 ├── requirements.txt     # Python dependencies
 ├── Dockerfile           # Docker image definition
 ├── docker-compose.yml   # Docker Compose configuration
-├── test_*.py            # Test files (111 tests)
+├── test_*.py            # Test files (114 tests)
 ├── .env.example         # Environment template
 └── conversations/       # Saved conversations and jobs (persistent)
 ```
@@ -204,11 +205,11 @@ The bot includes comprehensive test coverage:
 
 - **24 tests** for Claude client (API, conversation, channel, user & news generation)
 - **51 tests** for handlers and commands (mentions, permissions, message handling, commands)
-- **24 tests** for scheduled news (jobs, generation, publishing, commands)
+- **27 tests** for scheduled news (jobs, channel assignment, generation, publishing, commands)
 - **5 tests** for middleware (log_updates)
 - **7 tests** for main (proxy, single shared `ClaudeClient`, initialization, error handling)
 
-All 111 tests run automatically on container startup using pytest. If tests fail, the bot won't start.
+All 114 tests run automatically on container startup using pytest. If tests fail, the bot won't start.
 
 ## 🌐 OmniRoute
 

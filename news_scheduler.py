@@ -89,7 +89,7 @@ class NewsScheduler:
             self._schedule_job(job)
         self.scheduler.start()
         if self.channel_id is None:
-            logger.warning('NEWS_CHANNEL_ID is not configured; scheduled news publishing is disabled')
+            logger.warning('NEWS_CHANNEL_ID is not configured; news jobs require an assigned channel')
 
     def shutdown(self):
         if self.scheduler.running:
@@ -124,8 +124,6 @@ class NewsScheduler:
         created_by: int,
         weekday: Optional[str] = None,
     ) -> str:
-        if self.channel_id is None:
-            raise NewsConfigurationError('NEWS_CHANNEL_ID не настроен')
         if schedule_type not in ('daily', 'weekly'):
             raise ValueError('Тип расписания должен быть daily или weekly')
         self._parse_time(time_value)
@@ -139,6 +137,7 @@ class NewsScheduler:
         job_id = uuid.uuid4().hex[:8]
         job = {
             'id': job_id,
+            'channel_id': self.channel_id,
             'schedule_type': schedule_type,
             'weekday': weekday if schedule_type == 'weekly' else None,
             'time': time_value,
@@ -171,6 +170,18 @@ class NewsScheduler:
             self.scheduler.remove_job(job_id)
         return True
 
+    async def assign_channel(self, job_id: str, channel_id: int):
+        job = self.jobs.get(job_id)
+        if job is None:
+            raise ValueError('Задание не найдено')
+        previous_channel_id = job.get('channel_id')
+        job['channel_id'] = channel_id
+        try:
+            await self._save_jobs()
+        except Exception:
+            job['channel_id'] = previous_channel_id
+            raise
+
     def get_jobs(self) -> List[dict]:
         jobs = sorted(self.jobs.values(), key=lambda job: job['created_at'])
         return copy.deepcopy(jobs)
@@ -201,8 +212,9 @@ class NewsScheduler:
             raise ValueError('Задание не найдено')
 
         try:
-            if self.channel_id is None:
-                raise NewsConfigurationError('NEWS_CHANNEL_ID не настроен')
+            channel_id = job.get('channel_id') or self.channel_id
+            if channel_id is None:
+                raise NewsConfigurationError('Для задания не назначен канал')
             text = (await self.claude.generate_news(job['instruction'])).strip()
             if not text:
                 raise ValueError('OmniRoute вернул пустой текст')
@@ -210,7 +222,7 @@ class NewsScheduler:
                 raise ValueError('Сгенерированная новость превышает 4096 символов')
 
             sent_message = await self.bot.send_message(
-                chat_id=self.channel_id,
+                chat_id=channel_id,
                 text=text,
                 parse_mode=None,
             )

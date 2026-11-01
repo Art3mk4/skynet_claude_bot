@@ -51,9 +51,10 @@ Async Telegram bot (aiogram 3.x) that proxies to Claude via OmniRoute (OpenAI-co
 - Async file writes go through a per-chat `asyncio.Lock` (`_conversation_locks`, LRU-capped at 100 entries) to avoid concurrent-write corruption; `channels.json`/`users.json` each have their own single lock.
 
 **Scheduled news:**
-- `/news_add daily HH:MM <instruction>` and `/news_add weekly <mon-sun> HH:MM <instruction>` create persistent jobs in `conversations/news_jobs.json`; `/news_list`, `/news_preview`, `/news_run`, and `/news_del` manage them.
+- `/news_add daily HH:MM <instruction>` and `/news_add weekly <mon-sun> HH:MM <instruction>` create persistent jobs in `conversations/news_jobs.json`; `/news_list`, `/news_assign`, `/news_preview`, `/news_run`, and `/news_del` manage them.
 - `ClaudeClient.generate_news()` is stateless and does not modify conversation history. OmniRoute does not fetch or verify current news; factual digests require separate external sources.
-- The scheduler restores jobs at startup and publishes plain text to `NEWS_CHANNEL_ID` using `NEWS_TIMEZONE` (default `Europe/Moscow`). The bot needs the channel's Post messages administrator permission.
+- The scheduler restores jobs at startup and publishes plain text using `NEWS_TIMEZONE` (default `Europe/Moscow`). Each job can have its own `channel_id`; jobs without one fall back to `NEWS_CHANNEL_ID` for backward compatibility.
+- `/news_assign <id>` shows inline buttons for monitored channels where the bot is an administrator with Post messages permission. The callback revalidates access before saving the selection.
 - Empty/overlong generations are rejected. Failed or uncertain Telegram sends are not blindly retried. Run only one scheduler instance to avoid duplicate posts.
 
 **Mention Detection (`mentions.py`):**
@@ -70,7 +71,7 @@ For group/channel support, **Privacy Mode must be disabled** in @BotFather:
 - `/mybots` → Select bot → Bot Settings → Group Privacy → **DISABLED**
 
 ### Channels
-**Important:** the bot only works through a channel's **discussion group**, not the channel itself — Telegram bots cannot receive messages directly from channels even as admin. To wire one up: enable the discussion group, add the bot as admin there, and have users mention `@botname`/`skynet`/`скайнет` in comments. Outgoing scheduled posts instead use `NEWS_CHANNEL_ID` directly and require the Post messages administrator permission.
+**Important:** the bot only works through a channel's **discussion group**, not the channel itself — Telegram bots cannot receive messages directly from channels even as admin. To wire one up: enable the discussion group, add the bot as admin there, and have users mention `@botname`/`skynet`/`скайнет` in comments. Outgoing scheduled posts use the assigned job channel or the default `NEWS_CHANNEL_ID` and require the Post messages administrator permission.
 
 ### Commands
 - `/start`, `/help` — welcome / help text
@@ -79,7 +80,7 @@ For group/channel support, **Privacy Mode must be disabled** in @BotFather:
 - `/channels` — list manually-added channels plus any active chat where the bot is admin
 - `/add_channel <id>` / `/remove_channel <id>` — manage the monitored-channels list
 - `/user_add <id>` / `/user_del <id>` / `/user_list` — manage `users.json`; private chat only
-- `/news_add`, `/news_list`, `/news_preview`, `/news_run`, `/news_del` — manage scheduled generated channel posts; private chat only
+- `/news_add`, `/news_list`, `/news_assign`, `/news_preview`, `/news_run`, `/news_del` — manage scheduled generated channel posts; private chat only
 
 ## Environment Variables
 
@@ -91,7 +92,7 @@ For group/channel support, **Privacy Mode must be disabled** in @BotFather:
 | `OMNIROUTE_MODEL` | Model to use | No (default: `kr/claude-sonnet-4.5`) |
 | `OMNIROUTE_API_KEY` | OmniRoute API key (must not start with `your_`, or `ClaudeClient.__init__` raises) | Yes |
 | `ALLOWED_USERS` | Comma-separated user IDs | No |
-| `NEWS_CHANNEL_ID` | Numeric channel ID or `@channelusername` for scheduled posts | For news |
+| `NEWS_CHANNEL_ID` | Optional default numeric channel ID or `@channelusername`; jobs can override it | No |
 | `NEWS_TIMEZONE` | IANA timezone for scheduled posts | No (default: `Europe/Moscow`) |
 
 ## Important Notes

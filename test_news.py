@@ -3,11 +3,13 @@ import os
 from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
-from aiogram.types import Message
+from aiogram.types import CallbackQuery, Message
 
 from commands import (
     _parse_news_add_input,
+    callback_news_assign,
     cmd_news_add,
+    cmd_news_assign,
     cmd_news_del,
     cmd_news_list,
     cmd_news_preview,
@@ -61,7 +63,9 @@ def news_scheduler_mock():
     value.remove_job = AsyncMock(return_value=True)
     value.preview_job = AsyncMock(return_value='Предпросмотр новости')
     value.run_now = AsyncMock(return_value='Новость')
+    value.assign_channel = AsyncMock()
     value.get_jobs = Mock(return_value=[])
+    value.get_job = Mock(return_value={'id': 'job12345', 'channel_id': -1001234567890})
     value.get_next_run = Mock(return_value=None)
     return value
 
@@ -114,11 +118,15 @@ async def test_add_job_rejects_invalid_weekday(scheduler):
 
 
 @pytest.mark.asyncio
-async def test_add_job_requires_channel(bot, claude, tmp_path):
+async def test_add_job_without_default_channel_creates_unassigned_job(bot, claude, tmp_path):
     with patch.dict(os.environ, {'NEWS_CHANNEL_ID': '', 'NEWS_TIMEZONE': 'UTC'}):
         scheduler = NewsScheduler(bot, claude, jobs_file=tmp_path / 'news_jobs.json')
-        with pytest.raises(NewsConfigurationError):
-            await scheduler.add_job('daily', '09:00', 'Пост', created_by=123)
+        job_id = await scheduler.add_job('daily', '09:00', 'Пост', created_by=123)
+
+        assert scheduler.get_job(job_id)['channel_id'] is None
+        with pytest.raises(NewsConfigurationError, match='не назначен канал'):
+            await scheduler.run_now(job_id)
+        bot.send_message.assert_not_awaited()
 
 
 @pytest.mark.asyncio
@@ -269,3 +277,64 @@ async def test_cmd_news_del(message, news_scheduler_mock):
 
     news_scheduler_mock.remove_job.assert_awaited_once_with('job12345')
     message.answer.assert_awaited_once_with('Автопубликация удалена')
+
+
+@pytest.mark.asyncio
+async def test_assign_channel_overrides_default(scheduler, bot):
+    job_id = await scheduler.add_job('daily', '09:00', 'Сделай пост', created_by=123)
+
+    await scheduler.assign_channel(job_id, -1009999999999)
+    await scheduler.run_now(job_id)
+
+    assert scheduler.get_job(job_id)['channel_id'] == -1009999999999
+    bot.send_message.assert_awaited_once_with(
+        chat_id=-1009999999999,
+        text='Готовая новость',
+        parse_mode=None,
+    )
+
+
+def _configure_channel(message, can_post_messages=True):
+    message.bot = Mock()
+    message.bot.me = AsyncMock(return_value=Mock(id=999))
+    message.bot.get_chat = AsyncMock(return_value=Mock(type='channel', title='Новостной канал'))
+    message.bot.get_chat_member = AsyncMock(return_value=Mock(
+        status='administrator',
+        can_post_messages=can_post_messages,
+    ))
+
+
+@pytest.mark.asyncio
+async def test_cmd_news_assign_shows_channel_keyboard(message, news_scheduler_mock):
+    message.text = '/news_assign job12345'
+    _configure_channel(message)
+    claude = Mock()
+    claude.get_monitored_channels.return_value = {-1001234567890}
+
+    with patch('commands.is_allowed_user', return_value=True):
+        await cmd_news_assign(message, claude, news_scheduler_mock)
+
+    keyboard = message.answer.call_args.kwargs['reply_markup']
+    button = keyboard.inline_keyboard[0][0]
+    assert button.text == 'Новостной канал'
+    assert button.callback_data == 'news_assign:job12345:-1001234567890'
+
+
+@pytest.mark.asyncio
+async def test_callback_news_assign_assigns_channel(message, news_scheduler_mock):
+    _configure_channel(message)
+    message.edit_text = AsyncMock()
+    callback = AsyncMock(spec=CallbackQuery)
+    callback.message = message
+    callback.from_user = Mock(id=123)
+    callback.data = 'news_assign:job12345:-1001234567890'
+    callback.answer = AsyncMock()
+    claude = Mock()
+    claude.get_monitored_channels.return_value = {-1001234567890}
+
+    with patch('commands.is_allowed_user', return_value=True):
+        await callback_news_assign(callback, claude, news_scheduler_mock)
+
+    news_scheduler_mock.assign_channel.assert_awaited_once_with('job12345', -1001234567890)
+    message.edit_text.assert_awaited_once()
+    callback.answer.assert_awaited_once_with('Канал назначен')

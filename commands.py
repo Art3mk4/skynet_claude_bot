@@ -1,8 +1,8 @@
 import logging
 import os
 
-from aiogram import Router
-from aiogram.types import Message
+from aiogram import F, Router
+from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
 from aiogram.filters import Command, CommandStart
 
 from permissions import is_allowed_user, AllowedUserFilter
@@ -24,6 +24,7 @@ COMMANDS_LIST = (
     "/remove_channel <id> - Удалить канал\n"
     "/news_add - Добавить автопубликацию\n"
     "/news_list - Список автопубликаций\n"
+    "/news_assign <id> - Назначить канал\n"
     "/news_preview <id> - Предпросмотр новости\n"
     "/news_run <id> - Опубликовать сейчас\n"
     "/news_del <id> - Удалить автопубликацию\n"
@@ -96,6 +97,7 @@ async def cmd_help(message: Message, claude: ClaudeClient) -> None:
         "/user_del &lt;id&gt; - Удалить пользователя\n"
         "/news_add - Добавить автопубликацию\n"
         "/news_list - Список автопубликаций\n"
+        "/news_assign &lt;id&gt; - Назначить канал\n"
         "/news_preview &lt;id&gt; - Предпросмотр новости\n"
         "/news_run &lt;id&gt; - Опубликовать сейчас\n"
         "/news_del &lt;id&gt; - Удалить автопубликацию\n"
@@ -427,6 +429,9 @@ async def cmd_news_add(message: Message, claude: ClaudeClient, news_scheduler: N
     response = f"Автопубликация создана. ID: {job_id}"
     if next_run:
         response += f"\nСледующий запуск: {next_run.strftime('%d.%m.%Y %H:%M %Z')}"
+    job = news_scheduler.get_job(job_id)
+    if not job.get('channel_id'):
+        response += f"\nНазначьте канал: /news_assign {job_id}"
     await message.answer(response)
 
 
@@ -449,7 +454,11 @@ async def cmd_news_list(message: Message, claude: ClaudeClient, news_scheduler: 
         instruction = job['instruction']
         if len(instruction) > 150:
             instruction = instruction[:147] + '...'
-        response += f"\nID: {job['id']}\nРасписание: {schedule}\nИнструкция: {instruction}\n"
+        channel_id = job.get('channel_id') or 'не назначен'
+        response += (
+            f"\nID: {job['id']}\nРасписание: {schedule}\n"
+            f"Канал: {channel_id}\nИнструкция: {instruction}\n"
+        )
         if next_run:
             response += f"Следующий запуск: {next_run.strftime('%d.%m.%Y %H:%M %Z')}\n"
         if job.get('last_error'):
@@ -523,3 +532,91 @@ async def cmd_news_del(message: Message, claude: ClaudeClient, news_scheduler: N
         await message.answer("Автопубликация удалена")
     else:
         await message.answer("Задание не найдено")
+
+
+async def _get_available_news_channels(message: Message, claude: ClaudeClient) -> list[tuple[int, str]]:
+    channels = []
+    bot_info = await message.bot.me()
+    for channel_id in sorted(claude.get_monitored_channels()):
+        try:
+            chat = await message.bot.get_chat(channel_id)
+            if chat.type != 'channel':
+                continue
+            member = await message.bot.get_chat_member(channel_id, bot_info.id)
+            if member.status != 'administrator' or not member.can_post_messages:
+                continue
+            channels.append((channel_id, chat.title or str(channel_id)))
+        except Exception as error:
+            logger.warning(f"Cannot check news channel {channel_id}: {error}")
+    return channels
+
+
+@router.message(Command('news_assign'))
+async def cmd_news_assign(message: Message, claude: ClaudeClient, news_scheduler: NewsScheduler) -> None:
+    if not await _require_private_allowed_user(message, claude):
+        return
+
+    args = message.text.split()
+    if len(args) != 2:
+        await message.answer("Использование: /news_assign <id>")
+        return
+    if not news_scheduler.get_job(args[1]):
+        await message.answer("Задание не найдено")
+        return
+
+    channels = await _get_available_news_channels(message, claude)
+    if not channels:
+        await message.answer(
+            "Нет каналов с правом публикации. Добавьте канал через /add_channel "
+            "и выдайте боту право Post messages."
+        )
+        return
+
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(
+            text=title[:60],
+            callback_data=f"news_assign:{args[1]}:{channel_id}",
+        )]
+        for channel_id, title in channels
+    ])
+    await message.answer("Выберите канал для автопубликации:", reply_markup=keyboard)
+
+
+@router.callback_query(F.data.startswith('news_assign:'))
+async def callback_news_assign(
+    callback: CallbackQuery,
+    claude: ClaudeClient,
+    news_scheduler: NewsScheduler,
+) -> None:
+    if not callback.message:
+        await callback.answer("Сообщение недоступно", show_alert=True)
+        return
+    if callback.message.chat.type != 'private' or not is_allowed_user(callback.from_user.id, claude):
+        await callback.answer("У вас нет доступа к этой команде", show_alert=True)
+        return
+
+    try:
+        _, job_id, channel_value = callback.data.split(':')
+        channel_id = int(channel_value)
+    except (ValueError, AttributeError):
+        await callback.answer("Некорректный канал", show_alert=True)
+        return
+
+    channels = await _get_available_news_channels(callback.message, claude)
+    channel = next((item for item in channels if item[0] == channel_id), None)
+    if channel is None:
+        await callback.answer("Канал недоступен или у бота нет права публикации", show_alert=True)
+        return
+
+    try:
+        await news_scheduler.assign_channel(job_id, channel_id)
+    except ValueError as error:
+        await callback.answer(str(error), show_alert=True)
+        return
+    except Exception as error:
+        logger.error(f"Cannot assign channel to scheduled news job {job_id}: {error}", exc_info=True)
+        await callback.answer("Не удалось назначить канал", show_alert=True)
+        return
+
+    await callback.message.edit_text(f"Канал «{channel[1]}» назначен автопубликации {job_id}", parse_mode=None)
+    await callback.answer("Канал назначен")
