@@ -15,6 +15,9 @@ pytest -v                    # All tests
 pytest test_handlers.py -v   # Specific test file
 pytest -k test_function_name # Specific test
 
+# Lint
+ruff check .                 # Rules pinned in ruff.toml (E4/E7/E9/F)
+
 # Docker (tests run automatically before the bot starts)
 docker compose up --build
 docker compose logs -f
@@ -42,7 +45,7 @@ Async Telegram bot (aiogram 3.x) that proxies to Claude via OmniRoute (OpenAI-co
 - `permissions.is_allowed_user(user_id, claude)` and `AllowedUserFilter.__call__(self, message, claude)` both take the shared `ClaudeClient` via aiogram DI (see above) — they never construct their own.
 - `/clear`, `/help`, `/chats`, `/channels`, `/add_channel`, `/remove_channel` use the `AllowedUserFilter()` aiogram filter — unauthorized users get no response at all (filter just doesn't match).
 - `/user_add`, `/user_del`, `/user_list` and all `/news_*` commands go through `commands._require_private_allowed_user(message, claude)` (private-chat check, then `is_allowed_user`) so they can send an explicit rejection message instead of silently ignoring.
-- `handlers.py`'s catch-all handler applies checks in this order: private chat → must be in `is_allowed_user`; group/channel → must be a mention (`is_mention`) *and* the sender must be in `is_allowed_user` (unlike the README's "responds to anyone when mentioned" framing, the allowed-user check still applies — `ALLOWED_USERS` gates who can trigger a response everywhere, mentions only additionally gate groups/channels).
+- `handlers.py`'s catch-all handler applies checks in this order: private chat → must be in `is_allowed_user`; group/channel → must be a mention (`is_mention`) *and* the sender must be in `is_allowed_user`. `ALLOWED_USERS` gates who can trigger a response everywhere; mentions only additionally gate groups/channels.
 - Users come from two independent sources merged via `is_allowed_user()`/`get_allowed_users()`: the immutable `ALLOWED_USERS` env var and the runtime-editable `conversations/users.json`.
 
 **Conversation history:**

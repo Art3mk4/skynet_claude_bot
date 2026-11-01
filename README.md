@@ -4,7 +4,7 @@
 
 ![Python](https://img.shields.io/badge/python-3.12+-blue.svg)
 ![License](https://img.shields.io/badge/license-MIT-green.svg)
-![Tests](https://img.shields.io/badge/tests-114-passing-brightgreen.svg)
+![Tests](https://img.shields.io/badge/tests-passing-brightgreen.svg)
 
 AI-powered Telegram bot using Claude Sonnet 4.5 through OmniRoute gateway.
 
@@ -15,11 +15,11 @@ AI-powered Telegram bot using Claude Sonnet 4.5 through OmniRoute gateway.
 - **Claude Sonnet 4.5** via OmniRoute AI gateway
 - **Conversation context** - remembers last 20 messages per chat
 - **Privacy-first** - user whitelist for private chats
-- **Group support** - responds to mentions (no privacy mode needed)
+- **Group support** - responds to mentions (Privacy Mode must be disabled)
 - **Channel integration** - works through discussion groups
 - **Tor support** - SOCKS5 proxy with automatic fallback
 - **Docker-ready** - containerized deployment
-- **Tested** - 114 automated tests on startup
+- **Tested** - automated test suite runs on startup
 
 ## 🚀 Quick Start
 
@@ -126,7 +126,7 @@ Telegram bots cannot receive messages directly from channels. To use the bot wit
 - Bot responds to all messages from allowed users
 
 ### Group/Channel Discussion Groups
-- Bot responds to **anyone** when mentioned
+- Bot responds when an **allowed user** mentions it (`ALLOWED_USERS` still applies)
 - Mention formats: `@botname`, `skynet`, `скайнет`
 
 ### Available Commands
@@ -177,13 +177,15 @@ Writes use atomic file replacement. A process lock prevents two bot instances fr
 python3 -m venv venv
 source venv/bin/activate  # On Windows: venv\Scripts\activate
 pip install -r requirements.txt
+pip install -r requirements-test.txt  # pytest + ruff, needed for the tests below
 python main.py
 ```
 
 ### Running Tests
 
 ```bash
-pytest -v
+pytest -v      # test suite
+ruff check .   # lint
 ```
 
 Tests run automatically on Docker startup. If tests fail, the bot won't start.
@@ -203,7 +205,7 @@ claude_bot/
 ├── requirements.txt     # Python dependencies
 ├── Dockerfile           # Docker image definition
 ├── docker-compose.yml   # Docker Compose configuration
-├── test_*.py            # Test files (114 tests)
+├── test_*.py            # Test files
 ├── .env.example         # Environment template
 └── conversations/       # Saved conversations and jobs (persistent)
 ```
@@ -212,13 +214,13 @@ claude_bot/
 
 The bot includes comprehensive test coverage:
 
-- **24 tests** for Claude client (API, conversation, channel, user & news generation)
+- **25 tests** for Claude client (API, conversation, channel, user & news generation)
 - **51 tests** for handlers and commands (mentions, permissions, message handling, commands)
-- **45 tests** for scheduled news (jobs, channel assignment, generation, publishing, commands)
+- **51 tests** for scheduled news (jobs, channel assignment, generation, publishing, commands)
 - **5 tests** for middleware (log_updates)
 - **7 tests** for main (proxy, single shared `ClaudeClient`, initialization, error handling)
 
-All 132 tests run automatically on container startup using pytest. If tests fail, the bot won't start.
+All 139 tests run automatically on container startup using pytest. If tests fail, the bot won't start.
 
 ## 🌐 OmniRoute
 
