@@ -298,6 +298,8 @@ class ClaudeClient:
             max_tokens=2048,
             temperature=0.7
         )
+        if not response.choices:
+            raise ValueError('OmniRoute вернул ответ без вариантов')
         choice = response.choices[0]
         if choice.finish_reason == 'length':
             raise ValueError('Генерация прервана по лимиту токенов')

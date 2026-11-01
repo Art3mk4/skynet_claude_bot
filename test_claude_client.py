@@ -242,6 +242,16 @@ class TestNewsGeneration:
         with pytest.raises(ValueError, match='прервана'):
             await claude_client.generate_news('Сделай пост')
 
+    @pytest.mark.asyncio
+    async def test_generate_news_rejects_empty_choices(self, claude_client):
+        # Контент-фильтр или ошибка апстрима: гейтвей возвращает choices: []
+        mock_response = Mock()
+        mock_response.choices = []
+        claude_client.client.chat.completions.create = AsyncMock(return_value=mock_response)
+
+        with pytest.raises(ValueError, match='без вариантов'):
+            await claude_client.generate_news('Сделай пост')
+
 
 class TestChannelManagement:
     @pytest.mark.asyncio
