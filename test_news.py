@@ -157,6 +157,13 @@ def test_empty_timezone_uses_default(bot, claude, tmp_path):
     assert str(scheduler.timezone) == 'Europe/Moscow'
 
 
+def test_empty_max_jobs_uses_default(bot, claude, tmp_path):
+    with patch.dict(os.environ, {'NEWS_MAX_JOBS': ''}):
+        scheduler = NewsScheduler(bot, claude, jobs_file=tmp_path / 'news_jobs.json')
+
+    assert scheduler.max_jobs == 20
+
+
 @pytest.mark.asyncio
 async def test_add_job_without_default_channel_creates_unassigned_job(bot, claude, tmp_path):
     with patch.dict(os.environ, {'NEWS_CHANNEL_ID': '', 'NEWS_TIMEZONE': 'UTC'}):

@@ -67,7 +67,7 @@ class NewsScheduler:
 
     @staticmethod
     def _get_max_jobs() -> int:
-        value = os.getenv('NEWS_MAX_JOBS', '20').strip()
+        value = os.getenv('NEWS_MAX_JOBS', '20').strip() or '20'
         try:
             max_jobs = int(value)
         except ValueError as error:
